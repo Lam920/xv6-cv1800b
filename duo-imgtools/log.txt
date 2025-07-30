@@ -1,0 +1,55 @@
+cv180x_c906# printenv
+BOOT_PART_OFFSET=0x0
+BOOT_PART_SIZE=0x40000
+ROOTFS_PART_OFFSET=0x40000
+ROOTFS_PART_SIZE=0x180100
+arch=riscv
+baudrate=115200
+board=cv180x
+board_name=cv180x
+bootargs=root=/dev/mmcblk0p2 rootwait rw console=ttyS0,115200 earlycon=sbi riscv.fwsz=0x40000 loglevel=9
+bootcmd=run sdboot
+bootdelay=1
+consoledev=ttyS0
+cpu=generic
+fdtcontroladdr=81c03a70
+fileaddr=81400000
+filesize=1815cd
+gatewayip=192.168.0.11
+ipaddr=192.168.0.3
+netdev=eth0
+netmask=255.255.255.0
+othbootargs=earlycon=sbi riscv.fwsz=0x40000  loglevel=9
+root=root=/dev/mmcblk0p2 rootwait rw
+sdboot=setenv bootargs ${reserved_mem} ${root} ${mtdparts} console=$consoledev,$baudrate $othbootargs;echo Boot from SD ...;mmc dev 0 && fatload mmc 0 ${uImage_addr} boot.sd; if test $? -eq 0; then bootm ${uImage_addr}#config-cv1800b_milkv_duo_musl_riscv64_sd;fi;
+serverip=192.168.56.101
+stderr=serial
+stdin=serial
+stdout=serial
+uImage_addr=0x81400000
+update_addr=0x824c0000
+vendor=cvitek
+
+
+
+cv180x_c906# printenv
+baudrate=115200
+bootcmd=run sdboot
+bootdelay=1
+consoledev=ttyS0
+fdtcontroladdr=836b1df0
+gatewayip=192.168.0.11
+ipaddr=192.168.0.3
+kernel_comp_addr_r=0x82000000
+kernel_comp_size=0x01000000
+netdev=eth0
+netmask=255.255.255.0
+othbootargs=earlycon=sbi riscv.fwsz=0x80000  loglevel=9
+root=root=/dev/mmcblk0p2 rootwait rw
+sdboot=setenv bootargs ${reserved_mem} ${root} ${mtdparts} console=$consoledev,$baudrate $othbootargs;echo Boot from SD ...;mmc dev 0 && fatload mmc 0 ${uImage_addr} boot.sd; if test $? -eq 0; then bootm ${uImage_addr}#config-cv1800b_milkv_duo_sd;fi;
+serverip=192.168.56.101
+stderr=serial
+stdin=serial
+stdout=serial
+uImage_addr=0x81400000
+update_addr=0x83f40000
