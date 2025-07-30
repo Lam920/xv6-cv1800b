@@ -20,14 +20,20 @@ main()
     printfinit();
     printf("\n");
     printf("xv6 kernel is booting\n");
+    printf("lambt9 porting xv6\n");
     printf("\n");
     sbiinit();
+    printf("Done SBI init\n");
     kinit();         // physical page allocator
+    printf("Done kinit\n");
     kvminit();       // create kernel page table
+    printf("Done kvminit\n");
     kvminithart();   // turn on paging
+    printf("Done kvminithart\n");
     uart_base = UART0;
     __sync_synchronize();
     procinit();      // process table
+    printf("Done procinit\n");
     trapinit();      // trap vectors
     trapinithart();  // install kernel trap vector
     plicinit();      // set up interrupt controller
@@ -52,7 +58,9 @@ main()
 #ifdef SPI_DRIVER
     spiinit();
 #endif
+    printf("Do userinit\n");
     userinit();      // first user process
+    printf("Done userinit\n");
     __sync_synchronize();
     started = 1;
   } else {

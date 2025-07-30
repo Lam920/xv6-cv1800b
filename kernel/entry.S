@@ -2,6 +2,7 @@
         # and causes each hart (i.e. CPU) to jump there.
         # kernel.ld causes the following code to
         # be placed at KERNBASE.
+        # _end: define in .ld file
 .section .text
 .global _start
 _start:
@@ -36,6 +37,7 @@ _entry:
         mul a0, a0, a1
         add sp, sp, a0
 #else
+        # lambt9: 2 core so allocate 2*4096 bytes
         li a2, 1024*4
         addi a3, a0, 1
         mul a2, a2, a3

@@ -236,6 +236,8 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
+
+  printf("Alloc userinit with pid: %d\n", p->pid);
   
   // allocate one user page and copy initcode's instructions
   // and data into it.
@@ -246,7 +248,9 @@ userinit(void)
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
 
+  printf("Do copy initcode\n");
   safestrcpy(p->name, "initcode", sizeof(p->name));
+  printf("Done copy initcode\n");
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
@@ -698,6 +702,10 @@ kdelay(unsigned long n)
   uint64 t0 = r_time();
 
   while(r_time() - t0 < n * INTERVAL){
-    asm volatile("pause");
+#ifdef __x86_64__
+  asm volatile("pause");
+#else
+  asm volatile("nop");   
+#endif
   }
 }

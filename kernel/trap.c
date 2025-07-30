@@ -70,6 +70,11 @@ usertrap(void)
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    if(r_scause() == 0xd) {  // Load page fault
+      pte_t *pte = walk(p->pagetable, r_stval(), 0);
+      printf("         pagetable walk: pte=%p (valid=%d)\n", 
+            pte, pte ? (*pte & PTE_V) : 0);
+    }
     setkilled(p);
   }
 
@@ -217,7 +222,9 @@ devintr()
 #else
   } else if((scause & 0x8000000000000000L) &&
      (scause & 0xff) == 5){
+    // lambt9: Supervisor timer interrupt
     // S-mode timer interrupt,
+    // OpenSBI will STORE PLIC by itself
     unsigned long next;
 
     csr_clear(CSR_IE, 1 << 5);

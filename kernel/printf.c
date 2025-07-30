@@ -210,6 +210,7 @@ int printf(const char *fmt, ...)
 		acquire(&pr.lock);
 
 	va_start(va, fmt);
+	// lambt9: va now is contain argument that pass to printf function
 	count = vprintf(fmt, va);
 	va_end(va);
 

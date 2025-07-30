@@ -254,13 +254,15 @@ void
 uvmfirst(pagetable_t pagetable, uchar *src, uint sz)
 {
   char *mem;
-
+  printf("Do uvm first\n");
   if(sz >= PGSIZE)
     panic("uvmfirst: more than a page");
   mem = kalloc();
   memset(mem, 0, PGSIZE);
   mappages(pagetable, 0, PGSIZE, (uint64)mem, PTE_NORMAL|PTE_X|PTE_U);
   memmove(mem, src, sz);
+  asm volatile("fence.i"); 
+  printf("Done uvm first\n");
 }
 
 // Allocate PTEs and physical memory to grow process from oldsz to

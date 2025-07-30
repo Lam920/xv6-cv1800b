@@ -41,7 +41,7 @@ $K/ramdisk_data.o: fs.img
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
-#TOOLPREFIX = 
+TOOLPREFIX = /home/lambt9/Desktop/Porting_xv6/duo-buildroot-sdk/host-tools/gcc/riscv64-elf-x86_64/bin/riscv64-unknown-elf-
 
 # Try to infer the correct TOOLPREFIX if not set
 ifndef TOOLPREFIX
@@ -80,7 +80,7 @@ ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
 CFLAGS += -fno-pie -nopie
 endif
 
-LDFLAGS = -z max-page-size=4096 -z noexecstack --no-warn-rwx-segments
+LDFLAGS = -z max-page-size=4096 -z noexecstack
 ASFLAGS = $(CFLAGS)
 
 $K/kernel: $(OBJS) $K/kernel.ld $U/initcode
