@@ -15,3 +15,6 @@ mkfs
 kernel/kernel
 user/usys.S
 .gdbinit
+duo-imgtools/kernel.bin
+duo-imgtools/boot.sd
+duo-imgtools/boot.vfat
