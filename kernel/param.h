@@ -13,4 +13,5 @@
 #define MAXPATH      128   // maximum file path name
 #ifndef INTERVAL
 #define INTERVAL     1000000UL
+#define US_INTERVAL  10UL
 #endif

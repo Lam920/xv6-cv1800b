@@ -709,3 +709,24 @@ kdelay(unsigned long n)
 #endif
   }
 }
+
+
+void
+delayms(unsigned long n)
+{
+  usdelay(n * 1000UL);
+}
+
+void
+delayus(unsigned long n)
+{
+  uint64 t0 = r_time();
+
+  while(r_time() - t0 < n * US_INTERVAL){
+    #ifdef __x86_64__
+  asm volatile("pause");
+#else
+  asm volatile("nop");   
+#endif
+  }
+}

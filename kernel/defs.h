@@ -109,6 +109,9 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 void            kdelay(unsigned long n);
 
+void            delayms(unsigned long n);
+void            delayus(unsigned long n);
+
 // sbi.c
 #ifndef CONFIG_RISCV_M_MODE
 void            sbiinit(void);
