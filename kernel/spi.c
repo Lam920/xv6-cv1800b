@@ -30,7 +30,7 @@
 #ifdef I2C_DRIVER
 
 
-#define BIT(nr)		(1 << (nr))
+// #define BIT(nr)		(1 << (nr))
 typedef unsigned int	u32;
 typedef unsigned short	u16;
 typedef unsigned char	u8;

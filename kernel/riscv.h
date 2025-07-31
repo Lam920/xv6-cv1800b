@@ -1,3 +1,5 @@
+#ifndef INC_RISCV_H
+#define INC_RISCV_H
 #ifndef __ASSEMBLER__
 
 // which hart (core) is this?
@@ -425,3 +427,5 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #define PTE_RO		(PTE_R)
 #endif
 #define PTE_NORMAL	(PTE_RO | PTE_W)
+
+#endif

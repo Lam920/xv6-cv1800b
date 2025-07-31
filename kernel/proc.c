@@ -714,7 +714,7 @@ kdelay(unsigned long n)
 void
 delayms(unsigned long n)
 {
-  usdelay(n * 1000UL);
+  delayus(n * 1000UL);
 }
 
 void

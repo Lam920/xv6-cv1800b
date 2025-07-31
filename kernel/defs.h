@@ -1,3 +1,6 @@
+#ifndef INC_DEFS_H
+#define INC_DEFS_H
+#include "riscv.h"
 struct buf;
 struct context;
 struct file;
@@ -215,3 +218,5 @@ void            spiinit(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
+#endif

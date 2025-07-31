@@ -5,6 +5,9 @@
 
 #include "types.h"
 
+#define BIT(nr)         (1UL << (nr))
+#define MMC_CAP(mode)   (1 << mode)
+
 static inline void write8(unsigned long addr, uint8 value)
 {
   *(volatile uint8 *)addr = value;
@@ -43,6 +46,25 @@ static inline void write64(unsigned long addr, uint64 value)
 static inline uint64 read64(unsigned long addr)
 {
   return *(volatile uint64 *)addr;
+}
+
+
+// addrのレジスタのclearビットをクリアする
+static inline void clrbits32(uintptr_t addr, uint32_t clear)
+{
+    write32(addr, read32(addr) & ~clear);
+}
+
+// addrのレジスタのsetビットをセットする
+static inline void setbits32(uintptr_t addr, uint32_t set)
+{
+    write32(addr, read32(addr) | set);
+}
+
+// addrのレジスタのclearビットをクリアしてsetビットをセットする
+static inline void clrsetbits32(uintptr_t addr, uint32_t clear, uint32_t set)
+{
+    write32(addr, (read32(addr) & ~clear) | set);
 }
 
 #endif
