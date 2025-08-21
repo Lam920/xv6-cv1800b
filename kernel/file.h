@@ -44,3 +44,6 @@ extern struct devsw devsw[];
 #define ADC 4
 #define I2C 5
 #define SPI 6
+
+
+#define SDCARD 7

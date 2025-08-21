@@ -8,9 +8,7 @@
 #include "sd.h"
 #include "config.h"
 
-#ifdef CV180X
-#include "cv180x_reg.h"
-#endif
+#include "emmc.h"
 
 /*
  * the kernel's page table.
@@ -40,16 +38,18 @@ kvmmake(void)
 
 
 #ifdef CV180X
-    kvmmap(kpgtbl, MMIO_BASE, MMIO_BASE, PGSIZE, PTE_DEVICE);
-    kvmmap(kpgtbl, CLKGEN_BASE, CLKGEN_BASE, PGSIZE, PTE_DEVICE);
-    kvmmap(kpgtbl, PINMUX_BASE, PINMUX_BASE, PGSIZE, PTE_DEVICE);
-    kvmmap(kpgtbl, RESET_BASE, RESET_BASE, PGSIZE, PTE_DEVICE);
-    kvmmap(kpgtbl, PLIC, PLIC, 0x400000, PTE_DEVICE);
-    kvmmap(kpgtbl, SD0, SD0, 16*PGSIZE, PTE_DEVICE);
-#endif
-
-#ifdef SD1
-  kvmmap(kpgtbl, SD1, SD1, 16*PGSIZE, PTE_DEVICE);
+  printf("Do kvm map for CV1800B\n");
+  kvmmap(kpgtbl, MMIO_BASE, MMIO_BASE, PGSIZE, PTE_DEVICE);
+  printf("Do kvm map for CLKGEN\n");
+  kvmmap(kpgtbl, CLKGEN_BASE, CLKGEN_BASE, PGSIZE, PTE_DEVICE);
+  printf("Do kvm map for PINMUX_BASE\n");
+  kvmmap(kpgtbl, PINMUX_BASE, PINMUX_BASE, PGSIZE, PTE_DEVICE);
+  printf("Do kvm map for RESET_BASE\n");
+  kvmmap(kpgtbl, RESET_BASE, RESET_BASE, PGSIZE, PTE_DEVICE);
+  // kvmmap(kpgtbl, PLIC, PLIC, 0x400000, PTE_DEVICE);
+  printf("Do kvm map for SD0_BASE\n");
+  kvmmap(kpgtbl, SD0_BASE, SD0_BASE, 16*PGSIZE, PTE_DEVICE);
+  printf("Do kvm map for GPIO\n");
 #endif
 
 #ifdef GPIO0
@@ -91,7 +91,9 @@ kvmmake(void)
 #endif
 
   // PLIC
+  printf("Do kvm map for PLIC\n");
   kvmmap(kpgtbl, PLIC, PLIC, 0x400000, PTE_DEVICE);
+  printf("Done kvm map for PLIC\n");
 
   // map kernel text executable and read-only.
   kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_EXEC);

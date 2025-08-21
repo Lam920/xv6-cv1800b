@@ -78,7 +78,7 @@
 /* #define PWM2 0x3062000 */
 /* #define PWM3 0x3063000 */
 /* core local interruptor (CLINT), which contains the timer. */
-// #define CLINT 0x2000000L
+/* #define CLINT 0x2000000L */
 /* qemu puts platform-level interrupt controller (PLIC) here. */
 /* PHYSTOP: 0x83e0_0000 */
 /* map the trampoline page to the highest address,

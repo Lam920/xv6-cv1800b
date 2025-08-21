@@ -31,9 +31,9 @@ struct mbr {
 
 
 struct partition_info {
-  uint32_t  lba;
-  uint32_t  nsecs;
-  char      type;
+  uint32_t  lba; // Logical Block Address begin
+  uint32_t  nsecs; // Number of Sectors of this partition
+  char      type; // Type of FS
   uint8_t   name[23];
 } __attribute__((packed));
 typedef struct partition_info ptinfo_t;

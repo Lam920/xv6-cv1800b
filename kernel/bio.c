@@ -22,6 +22,7 @@
 #include "defs.h"
 #include "fs.h"
 #include "buf.h"
+#include "list.h"
 
 struct {
   struct spinlock lock;

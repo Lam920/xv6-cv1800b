@@ -730,3 +730,8 @@ delayus(unsigned long n)
 #endif
   }
 }
+
+uint64_t get_timer(uint64_t start)
+{
+    return (r_time() / US_INTERVAL) / 1000 - start;
+}

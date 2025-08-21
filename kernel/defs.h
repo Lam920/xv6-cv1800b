@@ -11,6 +11,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct emmc;
 
 // bio.c
 void            binit(void);
@@ -114,6 +115,7 @@ void            kdelay(unsigned long n);
 
 void            delayms(unsigned long n);
 void            delayus(unsigned long n);
+uint64_t        get_timer(uint64_t start);
 
 // sbi.c
 #ifndef CONFIG_RISCV_M_MODE
@@ -144,6 +146,7 @@ void            initsleeplock(struct sleeplock*, char*);
 int             memcmp(const void*, const void*, uint);
 void*           memmove(void*, const void*, uint);
 void*           memset(void*, int, uint);
+void*           memcpy(void *, const void *, uint32_t);
 char*           safestrcpy(char*, const char*, int);
 int             strlen(const char*);
 int             strncmp(const char*, const char*, uint);
@@ -215,6 +218,20 @@ void            i2cinit(void);
 
 // spi.c
 void            spiinit(void);
+
+
+// emmc.c
+void            emmc_clear_interrupt(void);
+void            emmc_intr(struct emmc *self);
+int             emmc_init(struct emmc *self);
+size_t          emmc_read(struct emmc *self, void *buf, size_t cnt);
+size_t          emmc_write(struct emmc *self, void *buf, size_t cnt);
+uint64_t        emmc_seek(struct emmc *self, uint64_t off);
+
+// sd.c
+void            sd_init(void);
+void            sd_intr(void);
+void            sd_rw(struct buf *);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
