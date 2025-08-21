@@ -138,10 +138,12 @@ sd_init(void)
     }
 #endif
 
+    /* Find first block of EXT2 partition by Logical Block Address (LBA) of MBR */
     uint32_t ext2_offset = ptinfo[1].lba * SECTOR_SIZE;
-    /* Fist 2 SECTOR of ext2 is for boot sector */
+    /* First 2 SECTOR of ext2 is for boot sector */
     acquire(&sdlock);
     emmc_seek(&sd0, (uint64_t)(ext2_offset + 2 * SECTOR_SIZE));
+    /* Read first 1024 bytes which contain ext2 Superblock after passthrough BOOT RECORD */
     memset(buf, 0, 1024);
     bytes = emmc_read(&sd0, buf, 1024);
     if (bytes != 1024)
@@ -154,6 +156,12 @@ sd_init(void)
     }
     printf("Ext2 block count %d\n", sb->s_blocks_count);
     printf("Ext2 inode count %d\n", sb->s_inodes_count);
+    printf("Ext2 number of block groups %d\n", sb->s_block_group_nr);
+    printf("Ext2 blocks count: %d\n", (int)(sb->s_blocks_count / sb->s_blocks_per_group) + 1);
+    printf("Ext2 block size: %d\n", 1024 << sb->s_log_block_size);
+    printf("Ext2 block/group: %d and inodes/group: %d\n",
+           sb->s_blocks_per_group, sb->s_inodes_per_group);
+    printf("First data block: %d\n", sb->s_first_data_block);
 
     info("sd_init ok\n");
 }

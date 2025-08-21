@@ -89,6 +89,13 @@ enum {
 #define S_IXOTH 00001
 
 
+#define EXT2_NDIR_BLOCKS  12
+#define EXT2_IND_BLOCK    EXT2_NDIR_BLOCKS
+#define EXT2_DIND_BLOCK   (EXT2_IND_BLOCK + 1)
+#define EXT2_TIND_BLOCK   (EXT2_DIND_BLOCK + 1)
+#define EXT2_N_BLOCKS     (EXT2_TIND_BLOCK + 1)
+
+
 /**
  * This struct is based on the Linux Sorce Code fs/ext2/ext2.h.
  * It is the ext2 superblock layout definition.
@@ -167,6 +174,156 @@ struct ext2_superblock {
   uint32 s_first_meta_bg;   /* First metablock block group */
   uint32 s_reserved[190];  /* Padding to the end of the block */
 };
+
+/*
+ * Structure of an inode on the disk
+ */
+struct ext2_inode {
+  uint16 i_mode;  /* File mode */
+  uint16 i_uid;   /* Low 16 bits of Owner Uid */
+  uint32 i_size;  /* Size in bytes */
+  uint32 i_atime; /* Access time */
+  uint32 i_ctime; /* Creation time */
+  uint32 i_mtime; /* Modification time */
+  uint32 i_dtime; /* Deletion Time */
+  uint16 i_gid;   /* Low 16 bits of Group Id */
+  uint16 i_links_count; /* Links count */
+  uint32 i_blocks; /* Blocks count */
+  uint32 i_flags;  /* File flags */
+  union {
+    struct {
+      uint32  l_i_reserved1;
+    } linux1;
+    struct {
+      uint32  h_i_translator;
+    } hurd1;
+    struct {
+      uint32  m_i_reserved1;
+    } masix1;
+  } osd1;    /* OS dependent 1 */
+  uint32 i_block[EXT2_N_BLOCKS];  /* Pointers to blocks */
+  uint32 i_generation;  /* File version (for NFS) */
+  uint32 i_file_acl;    /* File ACL */
+  uint32 i_dir_acl;     /* Directory ACL */
+  uint32 i_faddr;       /* Fragment address */
+  union {
+    struct {
+      uint8  l_i_frag;  /* Fragment number */
+      uint8  l_i_fsize; /* Fragment size */
+      uint16 i_pad1;
+      uint16 l_i_uid_high;  /* these 2 fields    */
+      uint16 l_i_gid_high;  /* were reserved2[0] */
+      uint32 l_i_reserved2;
+    } linux2;
+    struct {
+      uint8  h_i_frag;  /* Fragment number */
+      uint8  h_i_fsize; /* Fragment size */
+      uint16 h_i_mode_high;
+      uint16 h_i_uid_high;
+      uint16 h_i_gid_high;
+      uint32 h_i_author;
+    } hurd2;
+    struct {
+      uint8  m_i_frag;  /* Fragment number */
+      uint8  m_i_fsize; /* Fragment size */
+      uint16 m_pad1;
+      uint32 m_i_reserved2[2];
+    } masix2;
+  } osd2;   /* OS dependent 2 */
+};
+
+struct ext2_inode_info {
+  struct ext2_inode i_ei;
+  uint flags;
+};
+
+/*
+ * Structure of a directory entry
+ */
+
+struct ext2_dir_entry {
+  uint32 inode;       /* Inode number */
+  uint16 rec_len;     /* Directory entry length */
+  uint16 name_len;    /* Name length */
+  char   name[];      /* File name, up to EXT2_NAME_LEN */
+};
+
+/*
+ * The new version of the directory entry.  Since EXT2 structures are
+ * stored in intel byte order, and the name_len field could never be
+ * bigger than 255 chars, it's safe to reclaim the extra byte for the
+ * file_type field.
+ */
+struct ext2_dir_entry_2 {
+  uint32 inode;      /* Inode number */
+  uint16 rec_len;    /* Directory entry length */
+  uint8  name_len;   /* Name length */
+  uint8  file_type;
+  char   name[];     /* File name, up to EXT2_NAME_LEN */
+};
+
+/*
+ * Structure of a blocks group descriptor
+ */
+struct ext2_group_desc
+{
+  uint32 bg_block_bitmap;       /* Blocks bitmap block */
+  uint32 bg_inode_bitmap;       /* Inodes bitmap block */
+  uint32 bg_inode_table;        /* Inodes table block */
+  uint16 bg_free_blocks_count;  /* Free blocks count */
+  uint16 bg_free_inodes_count;  /* Free inodes count */
+  uint16 bg_used_dirs_count;    /* Directories count */
+  uint16 bg_pad;
+  uint32 bg_reserved[3];
+};
+
+
+/*
+* Macro-instructions used to manage group descriptors
+*/
+#define EXT2_BLOCKS_PER_GROUP(s)  (EXT2_SB(s)->s_blocks_per_group)
+#define EXT2_DESC_PER_BLOCK(s)    (EXT2_SB(s)->s_desc_per_block)
+#define EXT2_INODES_PER_GROUP(s)  (EXT2_SB(s)->s_inodes_per_group)
+#define EXT2_DESC_PER_BLOCK_BITS(s) (EXT2_SB(s)->s_desc_per_block_bits)
+
+/*
+ * Codes for operating systems
+ */
+#define EXT2_OS_LINUX    0
+#define EXT2_OS_HURD     1
+#define EXT2_OS_MASIX    2
+#define EXT2_OS_FREEBSD  3
+#define EXT2_OS_LITES    4
+
+/*
+ * Revision levels
+ */
+#define EXT2_GOOD_OLD_REV 0  /* The good old (original) format */
+#define EXT2_DYNAMIC_REV  1  /* V2 format w/ dynamic inode sizes */
+
+#define EXT2_CURRENT_REV EXT2_GOOD_OLD_REV
+#define EXT2_MAX_SUPP_REV EXT2_DYNAMIC_REV
+
+#define EXT2_GOOD_OLD_INODE_SIZE 128
+
+/*
+ * Special inode numbers
+ */
+#define EXT2_BAD_INO          1  /* Bad blocks inode */
+#define EXT2_ROOT_INO         2  /* Root inode */
+#define EXT2_BOOT_LOADER_INO  5  /* Boot loader inode */
+#define EXT2_UNDEL_DIR_INO    6  /* Undelete directory inode */
+
+/* First non-reserved inode for old ext2 filesystems */
+#define EXT2_GOOD_OLD_FIRST_INO 11
+
+#define EXT2_HAS_INCOMPAT_FEATURE(sb,mask)     \
+  ( EXT2_SB(sb)->s_es->s_feature_incompat & mask )
+#define EXT2_HAS_RO_COMPAT_FEATURE(sb,mask)    \
+  ( EXT2_SB(sb)->s_es->s_feature_ro_compat & mask )
+
+#define EXT2_FEATURE_INCOMPAT_META_BG   0x0010
+#define EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER	0x0001
 
 #endif /* XV6_EXT2_h */
 
