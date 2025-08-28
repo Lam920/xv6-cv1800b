@@ -175,6 +175,31 @@ struct ext2_superblock {
   uint32 s_reserved[190];  /* Padding to the end of the block */
 };
 
+
+struct ext2_sb_info {
+  unsigned long s_inodes_per_block; /* Number of inodes per block */
+  unsigned long s_blocks_per_group; /* Number of blocks in a group */
+  unsigned long s_inodes_per_group; /* Number of inodes in a group */
+  unsigned long s_itb_per_group;    /* Number of inode table blocks per group */
+  unsigned long s_gdb_count;        /* Number of group descriptor blocks */
+  unsigned long s_desc_per_block;   /* Number of group descriptors per block */
+  unsigned long s_groups_count;     /* Number of groups in the fs */
+  unsigned long s_overhead_last;    /* Last calculated overhead */
+  unsigned long s_blocks_last;      /* Last seen block count */
+  struct buf *s_sbh;                /* Buffer containing the super block */
+  struct ext2_superblock *s_es;     /* Pointer to the super block in the buffer */
+  struct buf *s_group_desc[EXT2_MAX_BGC];
+  unsigned long  s_sb_block;
+  unsigned short s_pad;
+  int s_addr_per_block_bits;
+  int s_desc_per_block_bits;
+  int s_inode_size;
+  int s_first_ino;
+  unsigned long s_dir_count;
+  uint8 *s_debts;
+  int flags;
+};
+
 /*
  * Structure of an inode on the disk
  */
@@ -310,7 +335,7 @@ struct ext2_group_desc
  * Special inode numbers
  */
 #define EXT2_BAD_INO          1  /* Bad blocks inode */
-#define EXT2_ROOT_INO         2  /* Root inode */
+#define EXT2_ROOT_INO         2  /* Root inode, inode 0 is reverse in ext2 */
 #define EXT2_BOOT_LOADER_INO  5  /* Boot loader inode */
 #define EXT2_UNDEL_DIR_INO    6  /* Undelete directory inode */
 
