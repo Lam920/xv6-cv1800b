@@ -538,6 +538,7 @@ forkret(void)
     // regular process (e.g., because it calls sleep), and thus cannot
     // be run from main().
     first = 0;
+    /* lambt9: Init for ROOTFS on RAM ~ read sb and init log */
     fsinit(ROOTDEV);
   }
 

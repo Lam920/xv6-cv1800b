@@ -23,6 +23,9 @@
 #include "fs.h"
 #include "buf.h"
 #include "list.h"
+#include "sd.h"
+#include "printf.h"
+#include "file.h"
 
 struct {
   struct spinlock lock;
@@ -98,7 +101,11 @@ bread(uint dev, uint blockno)
   b = bget(dev, blockno);
   if(!b->valid) {
     //virtio_disk_rw(b, 0);
-    ramdiskrw(b, 0);
+    /* Add function to read from SDCARD */
+    if (dev == SDCARD)
+      sd_read_ext2(dev, blockno, (char *)b->data);
+    else
+      ramdiskrw(b, 0);
     b->valid = 1;
   }
   return b;

@@ -350,5 +350,7 @@ struct ext2_group_desc
 #define EXT2_FEATURE_INCOMPAT_META_BG   0x0010
 #define EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER	0x0001
 
+#define EXT2_DEFAULT_BLOCK_SIZE   1024
+
 #endif /* XV6_EXT2_h */
 

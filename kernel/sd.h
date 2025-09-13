@@ -59,4 +59,6 @@ static inline uint32_t fs_lba(int  dev)
     return ptinfo[dev].lba;
 }
 
+int sd_read_ext2(int dev, uint32_t blockno, char *buf);
+
 #endif

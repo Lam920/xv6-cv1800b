@@ -9,6 +9,7 @@
 #include "printf.h"
 #include "include/fat32.h"
 #include "include/ext2.h"
+#include "file.h"
 
 static struct emmc sd0;
 static struct list_head sdque;
@@ -137,6 +138,9 @@ sd_init(void)
       byte += 16;
     }
 #endif
+
+    /* Create devsw mapping function for ext2 */
+    // devsw[SDCARD].read  = sd_read_ext2;
 
     /* Find first block of EXT2 partition by Logical Block Address (LBA) of MBR */
     uint32_t ext2_offset = ptinfo[1].lba * SECTOR_SIZE;
@@ -321,6 +325,26 @@ sd_init(void)
         }
     }
     info("sd_init ok\n");
+}
+
+int sd_read_ext2(int dev, uint32_t blockno, char *buf)
+{
+    if (dev != SDCARD)
+        return -1;
+
+    //uint32_t sector_per_block = 1024 / SD_BLOCK_SIZE;
+
+    /* Calculate ext2 offset must based on SECTOR size of disk */
+    uint32_t ext2_offset = ptinfo[1].lba * SECTOR_SIZE;
+    acquire(&sdlock);
+    emmc_seek(&sd0, (uint64_t)(ext2_offset + blockno * EXT2_DEFAULT_BLOCK_SIZE));
+    size_t bytes = emmc_read(&sd0, buf, EXT2_DEFAULT_BLOCK_SIZE);
+    release(&sdlock);
+    if (bytes != EXT2_DEFAULT_BLOCK_SIZE) {
+      error("sd_read_ext2 failed\n");
+      return -1;  
+    }
+    return 0;
 }
 
 void

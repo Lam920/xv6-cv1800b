@@ -20,6 +20,19 @@ main(void)
     mknod("console", CONSOLE, 0);
     open("console", O_RDWR);
   }
+
+  /* mknod for SDCARD */
+  int fd = open("sdc", O_RDWR);
+  if (fd < 0) {
+    mknod("sdc", SDCARD, 0);
+    fd = open("sdc", O_RDWR);
+    if (fd < 0) {
+      printf("failed to open sdc\n");
+      return -1;
+    }
+  }
+  close(fd);
+
   dup(0);  // stdout
   dup(0);  // stderr
 
