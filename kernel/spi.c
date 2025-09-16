@@ -40,13 +40,13 @@ typedef unsigned char	u8;
  * strict type-checking.. See the
  * "unnecessary" pointer comparison.
  */
-#define min(x, y) ({				\
+#define _min(x, y) ({				\
 	typeof(x) _min1 = (x);			\
 	typeof(y) _min2 = (y);			\
 	(void) (&_min1 == &_min2);		\
 	_min1 < _min2 ? _min1 : _min2; })
 
-#define min3(x, y, z) min((typeof(x))min(x, y), z)
+#define min3(x, y, z) _min((typeof(x))_min(x, y), z)
 
 #define min_t(type, x, y) ({			\
 	type __min1 = (x);			\

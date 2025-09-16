@@ -5,6 +5,8 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "include/vfs.h"
+#include "file.h"
 
 struct cpu cpus[NCPU];
 
@@ -538,8 +540,11 @@ forkret(void)
     // regular process (e.g., because it calls sleep), and thus cannot
     // be run from main().
     first = 0;
+    printf("init: starting logging file system\n");
     /* lambt9: Init for ROOTFS on RAM ~ read sb and init log */
-    fsinit(ROOTDEV);
+    rootfs->fs_t->ops->readsb(ROOTDEV, &sb[ROOTDEV]);
+    initlog(ROOTDEV); // TODO: Decouple this from ROOTDEV
+    printf("init: file system logging mechanism initialized\n");
   }
 
   usertrapret();

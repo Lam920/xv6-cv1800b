@@ -6,14 +6,17 @@
 */
 
 #include "../types.h"
+#include "../list.h"
 
 #ifndef XV6_LIST_H_
 #define XV6_LIST_H_
 
+#if 0
 struct list_head {
     struct list_head* next;
     struct list_head* prev;
 };
+#endif
 
 #define POISON_POINTER_DELTA 0
 
@@ -102,7 +105,7 @@ static inline void __list_del_entry(struct list_head *entry)
   __list_del(entry->prev, entry->next);
 }
 
-static inline void list_del(struct list_head *entry)
+static inline void list_del_vfs(struct list_head *entry)
 {
   __list_del(entry->prev, entry->next);
   entry->next = LIST_POISON1;
@@ -170,20 +173,22 @@ static inline void list_move_tail(struct list_head *list,
  * @list: the entry to test
  * @head: the head of the list
  */
-static inline int list_is_last(const struct list_head *list,
-                               const struct list_head *head)
+static inline int list_is_last(struct list_head *list,
+                               struct list_head *head)
 {
   return list->next == head;
 }
 
+#if 0
 /**
  * list_empty - tests whether a list is empty
  * @head: the list to test.
  */
-static inline int list_empty(const struct list_head *head)
+static inline int list_empty(struct list_head *head)
 {
   return head->next == head;
 }
+#endif
 
 /**
  * list_empty_careful - tests whether a list is empty and not being modified
@@ -198,7 +203,7 @@ static inline int list_empty(const struct list_head *head)
  * to the list entry is list_del_init(). Eg. it cannot be used
  * if another CPU could re-list_add() it.
  */
-static inline int list_empty_careful(const struct list_head *head)
+static inline int list_empty_careful(struct list_head *head)
 {
   struct list_head *next = head->next;
   return (next == head) && (next == head->prev);
@@ -222,7 +227,7 @@ static inline void list_rotate_left(struct list_head *head)
  * list_is_singular - tests whether a list has just one entry.
  * @head: the list to test.
  */
-static inline int list_is_singular(const struct list_head *head)
+static inline int list_is_singular(struct list_head *head)
 {
   return !list_empty(head) && (head->next == head->prev);
 }
@@ -269,7 +274,7 @@ static inline void list_cut_position(struct list_head *list,
     __list_cut_position(list, head, entry);
 }
 
-static inline void __list_splice(const struct list_head *list,
+static inline void __list_splice(struct list_head *list,
                                  struct list_head *prev,
                                  struct list_head *next)
 {
@@ -288,7 +293,7 @@ static inline void __list_splice(const struct list_head *list,
  * @list: the new list to add.
  * @head: the place to add it in the first list.
  */
-static inline void list_splice(const struct list_head *list,
+static inline void list_splice(struct list_head *list,
                                struct list_head *head)
 {
   if (!list_empty(list))

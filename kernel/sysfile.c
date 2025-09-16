@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "include/vfs.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -135,7 +136,7 @@ sys_link(void)
     return -1;
   }
 
-  ilock(ip);
+  ip->iops->ilock(ip);
   if(ip->type == T_DIR){
     iunlockput(ip);
     end_op();
@@ -143,13 +144,13 @@ sys_link(void)
   }
 
   ip->nlink++;
-  iupdate(ip);
-  iunlock(ip);
+  ip->iops->iupdate(ip);
+  ip->iops->iunlock(ip);
 
   if((dp = nameiparent(new, name)) == 0)
     goto bad;
-  ilock(dp);
-  if(dp->dev != ip->dev || dirlink(dp, name, ip->inum) < 0){
+  ip->iops->ilock(dp);
+  if(dp->dev != ip->dev || dp->iops->dirlink(dp, name, ip->inum, ip->type) < 0){
     iunlockput(dp);
     goto bad;
   }
@@ -161,14 +162,15 @@ sys_link(void)
   return 0;
 
 bad:
-  ilock(ip);
+  ip->iops->ilock(ip);
   ip->nlink--;
-  iupdate(ip);
+  ip->iops->iupdate(ip);
   iunlockput(ip);
   end_op();
   return -1;
 }
 
+#if 0
 // Is the directory dp empty except for "." and ".." ?
 static int
 isdirempty(struct inode *dp)
@@ -177,19 +179,22 @@ isdirempty(struct inode *dp)
   struct dirent de;
 
   for(off=2*sizeof(de); off<dp->size; off+=sizeof(de)){
-    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+    if(dp->iops->readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
       panic("isdirempty: readi");
     if(de.inum != 0)
       return 0;
   }
   return 1;
 }
+#endif
 
 uint64
 sys_unlink(void)
 {
   struct inode *ip, *dp;
+#if 0
   struct dirent de;
+#endif
   char name[DIRSIZ], path[MAXPATH];
   uint off;
 
@@ -202,34 +207,37 @@ sys_unlink(void)
     return -1;
   }
 
-  ilock(dp);
+  dp->iops->ilock(dp);
 
   // Cannot unlink "." or "..".
-  if(namecmp(name, ".") == 0 || namecmp(name, "..") == 0)
+  if(dp->fs_t->ops->namecmp(name, ".") == 0 || dp->fs_t->ops->namecmp(name, "..") == 0)
     goto bad;
 
-  if((ip = dirlookup(dp, name, &off)) == 0)
+  if((ip = dp->iops->dirlookup(dp, name, &off)) == 0)
     goto bad;
-  ilock(ip);
+  ip->iops->ilock(ip);
 
   if(ip->nlink < 1)
     panic("unlink: nlink < 1");
-  if(ip->type == T_DIR && !isdirempty(ip)){
+  if(ip->type == T_DIR && !ip->iops->isdirempty(ip)){
     iunlockput(ip);
     goto bad;
   }
 
+#if 0
   memset(&de, 0, sizeof(de));
   if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+#endif
+  if(dp->iops->unlink(dp, off) == -1)
     panic("unlink: writei");
   if(ip->type == T_DIR){
     dp->nlink--;
-    iupdate(dp);
+    dp->iops->iupdate(dp);
   }
   iunlockput(dp);
 
   ip->nlink--;
-  iupdate(ip);
+  dp->iops->iupdate(ip);
   iunlockput(ip);
 
   end_op();
@@ -251,41 +259,41 @@ create(char *path, short type, short major, short minor)
   if((dp = nameiparent(path, name)) == 0)
     return 0;
 
-  ilock(dp);
+  dp->iops->ilock(dp);
 
-  if((ip = dirlookup(dp, name, 0)) != 0){
+  if((ip = dp->iops->dirlookup(dp, name, 0)) != 0){
     iunlockput(dp);
-    ilock(ip);
+    ip->iops->ilock(ip);
     if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
       return ip;
     iunlockput(ip);
     return 0;
   }
 
-  if((ip = ialloc(dp->dev, type)) == 0){
+  if((ip = dp->fs_t->ops->ialloc(dp->dev, type)) == 0){
     iunlockput(dp);
     return 0;
   }
 
-  ilock(ip);
+  ip->iops->ilock(ip);
   ip->major = major;
   ip->minor = minor;
   ip->nlink = 1;
-  iupdate(ip);
+  ip->iops->iupdate(ip);
 
   if(type == T_DIR){  // Create . and .. entries.
     // No ip->nlink++ for ".": avoid cyclic ref count.
-    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
+    if(ip->iops->dirlink(ip, ".", ip->inum, ip->type) < 0 || ip->iops->dirlink(ip, "..", dp->inum, ip->type) < 0)
       goto fail;
   }
 
-  if(dirlink(dp, name, ip->inum) < 0)
+  if(ip->iops->dirlink(dp, name, ip->inum, ip->type) < 0)
     goto fail;
 
   if(type == T_DIR){
     // now that success is guaranteed:
     dp->nlink++;  // for ".."
-    iupdate(dp);
+    dp->iops->iupdate(dp);
   }
 
   iunlockput(dp);
@@ -295,9 +303,85 @@ create(char *path, short type, short major, short minor)
  fail:
   // something went wrong. de-allocate ip.
   ip->nlink = 0;
-  iupdate(ip);
+  ip->iops->iupdate(ip);
   iunlockput(ip);
   iunlockput(dp);
+  return 0;
+}
+
+
+uint64
+sys_mount(void)
+{
+  char devf[MAXPATH];
+  char path[MAXPATH];
+  char fstype[MAXPATH];
+  struct inode *ip, *devi;
+
+  if (argstr(0, devf, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0 || argstr(2, fstype, MAXPATH) < 0) {
+    return -1;
+  }
+
+  if ((ip = namei(path)) == 0 || (devi = namei(devf)) == 0) {
+    return -1;
+  }
+
+  /* Get FS operation based on fstype pass into function */
+  struct filesystem_type *fs_t = getfs(fstype);
+
+  if (fs_t == 0) {
+    printf("FS type not found\n");
+    return -1;
+  }
+
+  ip->iops->ilock(ip);
+  devi->iops->ilock(devi);
+  // we only can mount points over directories nodes
+  if (ip->type != T_DIR && ip->ref > 1) {
+    ip->iops->iunlock(ip);
+    devi->iops->iunlock(devi);
+    return -1;
+  }
+
+  // The device inode should be T_DEVICE
+  if (devi->type != T_DEVICE) {
+    ip->iops->iunlock(ip);
+    devi->iops->iunlock(devi);
+    return -1;
+  }
+
+  // if (bdev_open(devi) != 0) {
+  //   ip->iops->iunlock(ip);
+  //   devi->iops->iunlock(devi);
+  //   return -1;
+  // }
+
+  if (devi->minor == 0 || devi->minor == ROOTDEV) {
+    ip->iops->iunlock(ip);
+    devi->iops->iunlock(devi);
+    return -1;
+  }
+
+  // Add this to a list to retrieve the Filesystem type to current device
+  if (putvfsonlist(devi->major, devi->minor, fs_t) == -1) {
+    ip->iops->iunlock(ip);
+    devi->iops->iunlock(devi);
+    return -1;
+  }
+
+  int mounted = fs_t->ops->mount(devi, ip);
+
+  if (mounted != 0) {
+    ip->iops->iunlock(ip);
+    devi->iops->iunlock(devi);
+    return -1;
+  }
+
+  ip->type = T_MOUNT;
+
+  ip->iops->iunlock(ip);
+  devi->iops->iunlock(devi);
+
   return 0;
 }
 
@@ -327,7 +411,7 @@ sys_open(void)
       end_op();
       return -1;
     }
-    ilock(ip);
+    ip->iops->ilock(ip);
     if(ip->type == T_DIR && omode != O_RDONLY){
       iunlockput(ip);
       end_op();
@@ -361,10 +445,10 @@ sys_open(void)
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
 
   if((omode & O_TRUNC) && ip->type == T_FILE){
-    itrunc(ip);
+    ip->iops->itrunc(ip);
   }
 
-  iunlock(ip);
+  ip->iops->iunlock(ip);
   end_op();
 
   return fd;
@@ -418,13 +502,13 @@ sys_chdir(void)
     end_op();
     return -1;
   }
-  ilock(ip);
+  ip->iops->ilock(ip);
   if(ip->type != T_DIR){
     iunlockput(ip);
     end_op();
     return -1;
   }
-  iunlock(ip);
+  ip->iops->iunlock(ip);
   iput(p->cwd);
   end_op();
   p->cwd = ip;

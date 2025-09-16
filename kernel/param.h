@@ -14,4 +14,8 @@
 #ifndef INTERVAL
 #define INTERVAL     1000000UL
 #define US_INTERVAL  10UL
+
 #endif
+
+#define MAXVFSSIZE 4  // maximum number of VFS
+#define ROOTFSTYPE   "s5" // Original root filesystem type

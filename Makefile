@@ -19,7 +19,6 @@ OBJS = \
   $K/syscall.o \
   $K/sysproc.o \
   $K/bio.o \
-  $K/fs.o \
   $K/log.o \
   $K/sleeplock.o \
   $K/file.o \
@@ -37,7 +36,11 @@ OBJS = \
   $K/i2c.o \
   $K/spi.o \
   $K/emmc.o \
-  $K/sd.o
+  $K/sd.o	\
+  $K/vfs.o \
+  $K/vfsmount.o \
+  $K/s5.o
+
 
 $K/ramdisk_data.o: fs.img
 

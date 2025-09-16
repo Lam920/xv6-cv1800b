@@ -6,6 +6,8 @@
 #include "sleeplock.h"
 #include "fs.h"
 #include "buf.h"
+#include "include/s5.h"
+#include "include/vfs.h"
 
 // Simple logging that allows concurrent FS system calls.
 //
@@ -52,16 +54,26 @@ static void recover_from_log(void);
 static void commit();
 
 void
-initlog(int dev, struct superblock *sb)
+initlog(int dev)
 {
   if (sizeof(struct logheader) >= BSIZE)
     panic("initlog: too big logheader");
 
+  char devnum[3];
+  itoa(dev, devnum);
+
+  struct superblock sb;
   initlock(&log.lock, "log");
-  log.start = sb->logstart;
-  log.size = sb->nlog;
+
+  s5_readsb(dev, &sb);
+  printf("s5_readsb complete");
+  struct s5_superblock *s5sb = sb.fs_info;
+
+  log.start = s5sb->logstart;
+  log.size = s5sb->nlog;
   log.dev = dev;
   recover_from_log();
+  printf("Recovered from log done\n");
 }
 
 // Copy committed blocks from log to their home location
@@ -116,6 +128,7 @@ write_head(void)
 static void
 recover_from_log(void)
 {
+  printf("recover_from_log: recovering log\n");
   read_head();
   install_trans(1); // if committed, copy from log to disk
   log.lh.n = 0;

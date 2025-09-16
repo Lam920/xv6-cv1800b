@@ -20,11 +20,15 @@
 #include "fs.h"
 #include "buf.h"
 #include "file.h"
+#include "include/vfs.h"
+#include "include/s5.h"
+
+
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 // there should be one superblock per disk device, but we run with
 // only one device
-struct superblock sb; 
+extern struct superblock sb[NDEV]; 
 
 // Read the super block.
 static void
@@ -40,12 +44,25 @@ readsb(int dev, struct superblock *sb)
 // Init fs
 void
 fsinit(int dev) {
+#ifdef OLD_FS
   readsb(dev, &sb);
   if(sb.magic != FSMAGIC)
     panic("invalid file system");
   initlog(dev, &sb);
+#else
+  // VFS init
+  vfs_fsinit(dev);
+  return;
+#endif
 }
 
+void vfs_fsinit(int dev) {
+  installrootfs();
+  rootfs->fs_t->ops->readsb(dev, &sb[dev]);
+}
+
+
+#if 0
 // Zero a block.
 static void
 bzero(int dev, int bno)
@@ -103,6 +120,8 @@ bfree(int dev, uint b)
   log_write(bp);
   brelse(bp);
 }
+
+#endif
 
 // Inodes.
 //
@@ -365,7 +384,7 @@ iput(struct inode *ip)
 void
 iunlockput(struct inode *ip)
 {
-  iunlock(ip);
+  ip->iops->iunlock(ip);
   iput(ip);
 }
 
@@ -379,6 +398,7 @@ iunlockput(struct inode *ip)
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
 // returns 0 if out of disk space.
+#if 0
 static uint
 bmap(struct inode *ip, uint bn)
 {
@@ -419,7 +439,9 @@ bmap(struct inode *ip, uint bn)
 
   panic("bmap: out of range");
 }
+#endif
 
+#if 0
 // Truncate inode (discard contents).
 // Caller must hold ip->lock.
 void
@@ -451,6 +473,7 @@ itrunc(struct inode *ip)
   ip->size = 0;
   iupdate(ip);
 }
+#endif
 
 // Copy stat information from inode.
 // Caller must hold ip->lock.
@@ -464,6 +487,7 @@ stati(struct inode *ip, struct stat *st)
   st->size = ip->size;
 }
 
+#if 0
 // Read data from inode.
 // Caller must hold ip->lock.
 // If user_dst==1, then dst is a user virtual address;
@@ -538,6 +562,8 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
   return tot;
 }
 
+#endif
+
 // Directories
 
 int
@@ -546,6 +572,7 @@ namecmp(const char *s, const char *t)
   return strncmp(s, t, DIRSIZ);
 }
 
+#if 0
 // Look for a directory entry in a directory.
 // If found, set *poff to byte offset of entry.
 struct inode*
@@ -604,6 +631,7 @@ dirlink(struct inode *dp, char *name, uint inum)
 
   return 0;
 }
+#endif
 
 // Paths
 
@@ -654,26 +682,40 @@ namex(char *path, int nameiparent, char *name)
   struct inode *ip, *next;
 
   if(*path == '/')
-    ip = iget(ROOTDEV, ROOTINO);
+    // ip = iget(ROOTDEV, ROOTINO);
+    rootfs->fs_t->ops->getroot(ROOTDEV, ROOTINO);
   else
     ip = idup(myproc()->cwd);
 
   while((path = skipelem(path, name)) != 0){
-    ilock(ip);
+    ip->iops->ilock(ip);
     if(ip->type != T_DIR){
       iunlockput(ip);
       return 0;
     }
     if(nameiparent && *path == '\0'){
       // Stop one level early.
-      iunlock(ip);
+      ip->iops->iunlock(ip);
       return ip;
     }
-    if((next = dirlookup(ip, name, 0)) == 0){
+    /* For cross mount point in mount FS*/
+    component_search:
+    if((next = ip->iops->dirlookup(ip, name, 0)) == 0){
       iunlockput(ip);
       return 0;
     }
+
+    if (next->inum == ROOTINO && isinoderoot(ip) && (strncmp(name, "..", 2) == 0)) {
+      struct inode *mntinode = mtablemntinode(ip);
+      iunlockput(ip);
+      ip = mntinode;
+      ip->iops->ilock(ip);
+      ip->ref++;
+      goto component_search;
+    }
+
     iunlockput(ip);
+
     ip = next;
   }
   if(nameiparent){

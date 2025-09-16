@@ -4,12 +4,20 @@
 #include "riscv.h"
 #include "defs.h"
 #include "emmc.h"
+#include "include/vfs.h"
+#include "include/vfsmount.h"
+#include "include/list.h"
+#include "spinlock.h"
 
 volatile static int started = 0;
 volatile static unsigned long main_hartid = ~0UL;
 
 extern volatile unsigned long uart_base;
 extern char _bss_start[], _bss_end[];
+
+
+static void initfss(void);
+
 // start() jumps here in supervisor mode on all CPUs.
 void
 main()
@@ -45,6 +53,16 @@ main()
     //virtio_disk_init(); // emulated hard disk
     ramdiskinit();
     sd_init();
+    /* New init for VFS implementation */
+    initvfssw();     // vfs table init  
+    initvfsmlist();  // vfs mount list init
+    mountinit();     // mount table init
+    printf("Done mountinit\n");
+    initfss();       // file systems
+    installrootfs();
+    printf("Done initfss\n");
+
+
 #ifdef GPIO_DRIVER
     gpioinit();
 #endif
@@ -76,4 +94,21 @@ main()
   }
 
   scheduler();        
+}
+
+
+static void
+initfss(void) {
+  // Init the supported filesystems
+  if (inits5fs() != 0) // init s5 fs
+    panic("S5 not registered");
+  if (initext2fs() != 0) // init s5 fs
+    panic("ext2 not registered");
+}
+
+
+int initext2fs(void) {
+  printf("Registering ext2 filesystem...\n");
+  printf("Ext2 fs registered\n");
+  return 0;
 }

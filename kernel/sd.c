@@ -9,7 +9,10 @@
 #include "printf.h"
 #include "include/fat32.h"
 #include "include/ext2.h"
-#include "file.h"
+
+#ifndef SDCARD
+#define SDCARD 7
+#endif
 
 static struct emmc sd0;
 static struct list_head sdque;
@@ -74,20 +77,20 @@ sd_init(void)
     release(&sdlock);
 
     //char *addr = buf;
-    uint32_t byte = 0;
-    printf("\n");
-    for (int i=0; i < 64; i++) {
-      for (int j=0; j < 16; j++) {
-        if (j == 0)
-          printf("%08x:", byte);
-        if (j%2)
-          printf("%02x", buf[i*16+j]);
-        else
-          printf(" %02x", buf[i*16+j]);
-      }
-      printf("\n");
-      byte += 16;
-    }
+    // uint32_t byte = 0;
+    // printf("\n");
+    // for (int i=0; i < 64; i++) {
+    //   for (int j=0; j < 16; j++) {
+    //     if (j == 0)
+    //       printf("%08x:", byte);
+    //     if (j%2)
+    //       printf("%02x", buf[i*16+j]);
+    //     else
+    //       printf(" %02x", buf[i*16+j]);
+    //   }
+    //   printf("\n");
+    //   byte += 16;
+    // }
 
     //assert(mbr.signature == 0xAA55);
 

@@ -1,3 +1,5 @@
+#if 0
+
 // On-disk file system format.
 // Both the kernel and user programs use this header file.
 
@@ -58,3 +60,11 @@ struct dirent {
   char name[DIRSIZ];
 };
 
+#endif
+
+#ifndef FS_H
+#define FS_H      
+
+#include "include/vfs.h"
+#define BSIZE 1024
+#endif

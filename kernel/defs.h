@@ -40,6 +40,7 @@ int             filewrite(struct file*, uint64, int n);
 int             fileioctl(struct file*, unsigned long, void *argp);
 
 // fs.c
+void            vfs_fsinit(int dev); // lambt9: init the file system
 void            fsinit(int);
 int             dirlink(struct inode*, char*, uint);
 struct inode*   dirlookup(struct inode*, char*, uint*);
@@ -70,7 +71,11 @@ void            kfree(void *);
 void            kinit(void);
 
 // log.c
+#ifdef ORIG_FS
 void            initlog(int, struct superblock*);
+#else
+void            initlog(int);
+#endif
 void            log_write(struct buf*);
 void            begin_op(void);
 void            end_op(void);
@@ -151,6 +156,9 @@ char*           safestrcpy(char*, const char*, int);
 int             strlen(const char*);
 int             strncmp(const char*, const char*, uint);
 char*           strncpy(char*, const char*, int);
+void            strconcat(char*, const char*, const char*);
+void            itoa(int, char*);
+int             strcmp(const char*, const char*);
 
 // syscall.c
 void            argint(int, int*);
@@ -232,6 +240,12 @@ uint64_t        emmc_seek(struct emmc *self, uint64_t off);
 void            sd_init(void);
 void            sd_intr(void);
 void            sd_rw(struct buf *);
+
+// s5.c
+int             inits5fs(void);
+
+// ext2.c
+int             initext2fs(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
