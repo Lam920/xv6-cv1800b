@@ -20,8 +20,21 @@ main(void)
     mknod("console", CONSOLE, 0);
     open("console", O_RDWR);
   }
-
   printf("init: done for console setup\n");
+
+  printf("init: creating device file for sd card ...\n");
+  int fd = open("sdb", O_RDWR);
+  if (fd < 0) {
+    mknod("sdb", ROOTDEV, SDCARD);
+    fd = open("sdb", O_RDWR);
+    if (fd < 0) {
+      printf("failed to open sdb for ext2\n");
+      return -1;
+    }
+  }
+
+  printf("init: done for sd card\n");
+  close(fd);
 
   dup(0);  // stdout
   dup(0);  // stderr

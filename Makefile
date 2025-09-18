@@ -35,11 +35,13 @@ OBJS = \
   $K/adc.o \
   $K/i2c.o \
   $K/spi.o \
+  $K/find_bits.o \
   $K/emmc.o \
   $K/sd.o	\
   $K/vfs.o \
   $K/vfsmount.o \
-  $K/s5.o
+  $K/s5.o \
+  $K/ext2.o
 
 
 $K/ramdisk_data.o: fs.img
@@ -157,6 +159,8 @@ UPROGS=\
 	$U/_adc\
 	$U/_i2c\
 	$U/_spi\
+	$U/_mount\
+	$U/_ls_ext2\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

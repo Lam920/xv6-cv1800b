@@ -76,7 +76,10 @@ sys_read(void)
   argaddr(1, &p);
   argint(2, &n);
   if(argfd(0, 0, &f) < 0)
+  {
+    printf("sys_read: argfd failed\n");
     return -1;
+  }
   return fileread(f, p, n);
 }
 
@@ -317,6 +320,7 @@ sys_mount(void)
   char path[MAXPATH];
   char fstype[MAXPATH];
   struct inode *ip, *devi;
+  int dev_major, dev_minor;
 
   if (argstr(0, devf, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0 || argstr(2, fstype, MAXPATH) < 0) {
     return -1;
@@ -350,11 +354,9 @@ sys_mount(void)
     return -1;
   }
 
-  // if (bdev_open(devi) != 0) {
-  //   ip->iops->iunlock(ip);
-  //   devi->iops->iunlock(devi);
-  //   return -1;
-  // }
+  dev_major = devi->major;
+  dev_minor = devi->minor;
+  printf("mount: device major %d minor %d and fs_type: %s\n", dev_major, dev_minor, fstype);
 
   if (devi->minor == 0 || devi->minor == ROOTDEV) {
     ip->iops->iunlock(ip);

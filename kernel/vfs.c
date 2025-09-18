@@ -275,11 +275,11 @@ generic_dirlink(struct inode *dp, char *name, uint inum, uint type)
 }
 
 int
-generic_readi(struct inode *ip, char *dst, uint off, uint n)
+generic_readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {
   uint tot, m;
   struct buf *bp;
-
+  // printf("generic_readi: off %d n %d with user_dst: %d\n", off, n, user_dst);
   if(ip->type == T_DEVICE){
 #if 0
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].read)
@@ -301,7 +301,11 @@ generic_readi(struct inode *ip, char *dst, uint off, uint n)
       break;
     bp = ip->fs_t->ops->bread(ip->dev, addr);
     m = min(n - tot, sb[ip->dev].blocksize - off % sb[ip->dev].blocksize);
-    memmove(dst, bp->data + off % sb[ip->dev].blocksize, m);
+    if(either_copyout(user_dst, dst, bp->data + (off % sb[ip->dev].blocksize), m) == -1) {
+      ip->fs_t->ops->brelse(bp);
+      tot = -1;
+      break;
+    }
     ip->fs_t->ops->brelse(bp);
   }
 
@@ -648,12 +652,23 @@ nameiparent(char *path, char *name)
   return namex(path, 1, name);
 }
 
-// int
-// sb_set_blocksize(struct superblock *sb, int size)
-// {
-//   /* If we get here, we know size is power of two
-//    * and it's value is between 512 and PAGE_SIZE */
-//   sb->blocksize = size;
-//   sb->s_blocksize_bits = blksize_bits(size);
-//   return sb->blocksize;
-// }
+/* assumes size > 256 */
+static inline unsigned int blksize_bits(unsigned int size)
+{
+  unsigned int bits = 8;
+  do {
+      bits++;
+      size >>= 1;
+    } while (size > 256);
+  return bits;
+}
+
+int
+sb_set_blocksize(struct superblock *sb, int size)
+{
+  /* If we get here, we know size is power of two
+   * and it's value is between 512 and PAGE_SIZE */
+  sb->blocksize = size;
+  sb->s_blocksize_bits = blksize_bits(size);
+  return sb->blocksize;
+}

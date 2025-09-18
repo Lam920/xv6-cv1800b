@@ -148,3 +148,16 @@ strcmp(const char *p, const char *q)
 
   return strncmp(p, q, gtrlen);
 }
+
+void *memscan(void *addr, int c, size_t size)
+{
+    unsigned char *p = addr;
+    unsigned char ch = (unsigned char)c;
+
+    while (size--) {
+        if (*p == ch)
+            return p;
+        p++;
+    }
+    return p;  // if not found, return first address after range
+}

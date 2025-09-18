@@ -9,6 +9,7 @@
 #include "printf.h"
 #include "include/fat32.h"
 #include "include/ext2.h"
+#include "file.h"
 
 #ifndef SDCARD
 #define SDCARD 7
@@ -37,6 +38,10 @@ static inline uint16_t read_le16(const uint8_t *p) {
 static inline uint32_t read_le32(const uint8_t *p) {
     return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
 }
+
+
+int dummy_ext2_read(int user_dst, uint64 dst, int n);
+int dummy_ext2_write(int user_src, uint64 src, int n);
 
 // Hack the partition.
 //static uint32_t first_bno = 0;
@@ -328,6 +333,18 @@ sd_init(void)
         }
     }
     info("sd_init ok\n");
+    devsw[SDCARD].read  = dummy_ext2_read;
+    devsw[SDCARD].write = dummy_ext2_write; /* Read-only for now */
+}
+
+int dummy_ext2_read(int user_dst, uint64 dst, int n){
+  printf("dummy_ext2_read called: user_dst %d, dst %p, n %d\n", user_dst, (void*)dst, n);
+  return 0;
+}
+
+int dummy_ext2_write(int user_src, uint64 src, int n){
+  printf("dummy_ext2_write called: user_src %d, src %p, n %d\n", user_src, (void*)src, n);
+  return 0; 
 }
 
 int sd_read_ext2(int dev, uint32_t blockno, char *buf)
@@ -359,7 +376,6 @@ sd_intr(void)
     wakeup(&sd0);
     release(&sdlock);
 }
-
 
 /*
  * SDカードのリクエスト処理を開始する.

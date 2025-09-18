@@ -162,7 +162,7 @@ struct filesystem_type* getfs(const char *fs_name);
 // Generic inode operations
 void generic_iunlock(struct inode*);
 void generic_stati(struct inode *ip, struct stat *st);
-int  generic_readi(struct inode *ip, char *dst, uint off, uint n);
+int  generic_readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
 int  generic_dirlink(struct inode *dp, char *name, uint inum, uint type);
 
 int sb_set_blocksize(struct superblock *sb, int size);

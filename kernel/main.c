@@ -102,13 +102,13 @@ initfss(void) {
   // Init the supported filesystems
   if (inits5fs() != 0) // init s5 fs
     panic("S5 not registered");
-  if (initext2fs() != 0) // init s5 fs
+  if (initext2fs() != 0) // init ext2 fs
     panic("ext2 not registered");
 }
 
 
-int initext2fs(void) {
-  printf("Registering ext2 filesystem...\n");
-  printf("Ext2 fs registered\n");
-  return 0;
-}
+// int initext2fs(void) {
+//   printf("Registering ext2 filesystem...\n");
+//   printf("Ext2 fs registered\n");
+//   return 0;
+// }

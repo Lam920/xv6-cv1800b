@@ -30,6 +30,8 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int ioctl(int, unsigned long, void*);
+int mount(const char *dev, const char *path, const char *fs_type);
+int ls_ext2(char *path);
 
 // ulib.c
 int stat(const char*, struct stat*);

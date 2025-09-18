@@ -4,6 +4,7 @@
  **/
 
 #include "../types.h"
+#include "vfs.h"
 
 #ifndef XV6_EXT2_H_
 #define XV6_EXT2_H_
@@ -200,6 +201,25 @@ struct ext2_sb_info {
   int flags;
 };
 
+static inline struct ext2_sb_info *
+EXT2_SB(struct superblock *sb)
+{
+  return sb->fs_info;
+}
+
+/*
+ * Macro-instructions used to manage several block sizes
+ */
+#define EXT2_MIN_BLOCK_SIZE    1024
+#define EXT2_MAX_BLOCK_SIZE         4096
+#define EXT2_BLOCK_SIZE(s)          ((s)->blocksize)
+#define EXT2_ADDR_PER_BLOCK(s)      (EXT2_BLOCK_SIZE(s) / sizeof (uint32))
+#define EXT2_BLOCK_SIZE_BITS(s)     ((s)->s_blocksize_bits)
+#define EXT2_ADDR_PER_BLOCK_BITS(s) (EXT2_SB(s)->s_addr_per_block_bits)
+#define EXT2_INODE_SIZE(s)          (EXT2_SB(s)->s_inode_size)
+#define EXT2_FIRST_INO(s)           (EXT2_SB(s)->s_first_ino)
+
+
 /*
  * Structure of an inode on the disk
  */
@@ -351,6 +371,43 @@ struct ext2_group_desc
 #define EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER	0x0001
 
 #define EXT2_DEFAULT_BLOCK_SIZE   1024
+
+
+static inline ext2_fsblk_t
+ext2_group_first_block_no(struct superblock *sb, unsigned long group_no)
+{
+  return group_no * (ext2_fsblk_t)EXT2_BLOCKS_PER_GROUP(sb) +
+          EXT2_SB(sb)->s_es->s_first_data_block;
+}
+
+// Filesystem specific operations
+
+int            ext2fs_init(void);
+int            ext2_mount(struct inode *, struct inode *);
+int            ext2_unmount(struct inode *);
+struct inode*  ext2_getroot();
+void           ext2_readsb(int dev, struct superblock *sb);
+struct inode*  ext2_ialloc(uint dev, short type);
+uint           ext2_balloc(uint dev);
+void           ext2_bzero(int dev, int bno);
+void           ext2_bfree(int dev, uint b);
+int            ext2_namecmp(const char *s, const char *t);
+struct inode*  ext2_iget(uint dev, uint inum);
+
+// Inode operations of ext2 Filesystem
+struct inode*  ext2_dirlookup(struct inode *dp, char *name, uint *off);
+void           ext2_iupdate(struct inode *ip);
+void           ext2_itrunc(struct inode *ip);
+void           ext2_cleanup(struct inode *ip);
+uint           ext2_bmap(struct inode *ip, uint bn);
+void           ext2_ilock(struct inode* ip);
+void           ext2_iunlock(struct inode* ip);
+void           ext2_stati(struct inode *ip, struct stat *st);
+int            ext2_readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
+int            ext2_writei(struct inode *ip, int user_src, uint64 src, uint off, uint n);
+int            ext2_dirlink(struct inode *dp, char *name, uint inum, uint type);
+int            ext2_unlink(struct inode *dp, uint off);
+int            ext2_isdirempty(struct inode *dp);
 
 #endif /* XV6_EXT2_h */
 
