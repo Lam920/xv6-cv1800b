@@ -410,6 +410,7 @@ ext2_readsb(int dev, struct superblock *sb)
     if (!sbi->s_group_desc[i]) {
       panic("Error on read ext2  group descriptor");
     }
+    ext2_ops.brelse(sbi->s_group_desc[i]);
   }
 
   sbi->s_gdb_count = db_count;
@@ -475,6 +476,11 @@ ext2_ialloc(uint dev, short type)
   group = 0;
   for(i = 0; i < sbi->s_groups_count; i++) {
     gdp = ext2_get_group_desc(&sb[dev], group, &bh2);
+    // Check if we already hold the lock
+    if (!holdingsleep(&bh2->lock)) {
+        acquiresleep(&bh2->lock);
+    }
+
 
     printf("Dump of block group descriptor of group %d\n", group);
     dump_block_group_desc(gdp);
@@ -488,12 +494,15 @@ ext2_ialloc(uint dev, short type)
 repeat_in_this_group:
     ino = ext2_find_next_zero_bit((unsigned long *)bitmap_bh->data,
                                   EXT2_INODES_PER_GROUP(&sb[dev]), ino);
+    printf("ext2_ialloc: found next zero bit at ino %d in group %d\n", ino, group);
+    printf("Inode per group: %d\n", EXT2_INODES_PER_GROUP(&sb[dev]));
     if (ino >= EXT2_INODES_PER_GROUP(&sb[dev])) {
       if (++group == sbi->s_groups_count)
         group = 0;
       continue;
     }
     if (ext2_set_bit_atomic(ino, (unsigned long *)bitmap_bh->data)) {
+      printf("We lost this inode\n");
       /* we lost this inode */
       if (++ino >= EXT2_INODES_PER_GROUP(&sb[dev])) {
         /* this group is exhausted, try next group */
@@ -526,6 +535,11 @@ got:
   /* spin_unlock(sb_bgl_lock(sbi, group)); */
 
   ext2_ops.bwrite(bh2);
+  // Only release if we acquired it here
+  if (!holdingsleep(&bh2->lock)) {
+      releasesleep(&bh2->lock);
+  }
+
 
   raw_inode = ext2_get_inode(&sb[dev], ino, &ibh);
 
@@ -604,6 +618,7 @@ ext2_dirlookup(struct inode *dp, char *name, uint *poff)
 void
 ext2_iupdate(struct inode *ip)
 {
+  printf("ext2_iupdate: updating inode %d on device %d\n", ip->inum, ip->dev);
   struct buf *bp;
   struct ext2_inode_info *ei;
   struct ext2_inode *raw_inode;
@@ -1190,6 +1205,14 @@ ext2_blks_to_allocate(Indirect * branch, int k, unsigned long blks,
  *
  * Return buffer_head on success or NULL in case of failure.
  */
+
+static int is_little_endian()
+{
+    uint32_t test = 0x12345678;
+    return (*(uint8_t*)&test == 0x78);
+}
+
+
 static struct buf *
 read_block_bitmap(struct superblock *sb, unsigned int block_group)
 {
@@ -1201,10 +1224,57 @@ read_block_bitmap(struct superblock *sb, unsigned int block_group)
   if (!desc)
     return 0;
   bitmap_blk = desc->bg_block_bitmap;
+  printf("..=======> Is little endian: %d\n", is_little_endian());
+  printf("read_block_bitmap: block group %d bitmap at %d\n",
+         (int)block_group, (int)bitmap_blk);
   bh = ext2_ops.bread(sb->minor, bitmap_blk);
   if (!bh) {
+    printf("dump_block_bitmap: failed to read bitmap block %u\n", bitmap_blk);
     return 0;
   }
+
+  int blocks_per_group = EXT2_BLOCKS_PER_GROUP(sb);
+  printf("=== Block Bitmap Dump for Group %u ===\n", block_group);
+    printf("Bitmap block: %u\n", bitmap_blk);
+    printf("Free blocks count: %u\n", desc->bg_free_blocks_count);
+    printf("Total blocks in group: %u\n", blocks_per_group);
+    printf("Bitmap content:\n");
+
+    // Dump the bitmap in a readable format
+    for (int i = 0; i < blocks_per_group; i++) {
+        if (i % 64 == 0) {
+            printf("\n%04d: ", i);  // Print block number every 64 blocks
+        }
+        
+        if (ext2_test_bit(i, (unsigned long *)bh->data)) {
+            printf("1");  // Block is allocated
+        } else {
+            printf("0");  // Block is free
+        }
+        
+        if (i % 8 == 7) {
+            printf(" ");  // Space every 8 bits for readability
+        }
+    }
+    printf("\n");
+
+    // Also show a summary
+    printf("\nSummary:\n");
+    printf("Free blocks: %u/%u (%.1f%% free)\n", 
+           desc->bg_free_blocks_count, blocks_per_group,
+           (float)desc->bg_free_blocks_count * 100.0 / blocks_per_group);
+
+    // Dump first few bytes in hex for verification
+    printf("First 16 bytes in hex: ");
+    unsigned char *data = (unsigned char *)bh->data;
+    for (int i = 0; i < 16; i++) {
+        printf("%02x ", data[i]);
+    }
+    printf("\n");
+
+
+
+
 
   /* ext2_valid_block_bitmap(sb, desc, block_group, bh); */
   /*
@@ -1320,10 +1390,13 @@ ext2_try_to_allocate(struct superblock *sb, int group,
   else
     start = 0;
   end = EXT2_BLOCKS_PER_GROUP(sb);
+  printf("ext2_try_to_allocate: group %d, goal %d, count %lu\n",
+         group, grp_goal, *count);
 
 repeat:
   if (grp_goal < 0) {
     grp_goal = find_next_usable_block(start, bitmap_bh, end);
+    printf("find_next_usable_block returned %d\n", grp_goal);
     if (grp_goal < 0)
       goto fail_access;
 
@@ -1358,6 +1431,7 @@ repeat:
   *count = num;
   return grp_goal - num;
 fail_access:
+  printf("ext2_try_to_allocate: fail to allocate\n");
   *count = num;
   return -1;
 }
@@ -1431,6 +1505,8 @@ ext2_new_blocks(struct inode *inode, ext2_fsblk_t goal,
     goal = es->s_first_data_block;
   }
 
+  printf("ext2_new_blocks: goal=%lu, count=%lu\n", goal, *count);
+
   group_no = (goal - es->s_first_data_block) / EXT2_BLOCKS_PER_GROUP(superb);
 retry_alloc:
   gdp = ext2_get_group_desc(superb, group_no, &gdp_bh);
@@ -1439,9 +1515,13 @@ retry_alloc:
 
   free_blocks = gdp->bg_free_blocks_count;
 
+  printf("ext2_new_blocks: group_no=%d, free_blocks=%lu\n",
+         group_no, free_blocks);
+
   if (free_blocks > 0) {
     grp_target_blk = ((goal - es->s_first_data_block) %
                       EXT2_BLOCKS_PER_GROUP(superb));
+    printf("ext2_new_blocks: grp_target_blk=%lu\n", grp_target_blk);
     bitmap_bh = read_block_bitmap(superb, group_no);
     if (!bitmap_bh)
       goto io_error;
@@ -1452,6 +1532,7 @@ retry_alloc:
   }
 
   ngroups = EXT2_SB(superb)->s_groups_count;
+  printf("ext2_new_blocks: ngroups=%lu\n", ngroups);
 
   /*
    * Now search the rest of the groups.  We assume that
@@ -1482,6 +1563,8 @@ retry_alloc:
      */
     grp_alloc_blk = ext2_try_to_allocate(superb, group_no,
                                          bitmap_bh, -1, &num);
+    printf("ext2_new_blocks: group_no=%d, free_blocks=%lu, grp_alloc_blk=%d\n",
+           group_no, free_blocks, grp_alloc_blk);
     if (grp_alloc_blk >= 0)
       goto allocated;
   }
@@ -1519,6 +1602,7 @@ allocated:
   return ret_block;
 
 io_error:
+  printf("ext2_new_blocks: IO error\n");
   *errp = -2;
 out:
   /*
@@ -1568,7 +1652,10 @@ ext2_alloc_blocks(struct inode *inode,
     /* allocating blocks for indirect blocks and direct blocks */
     current_block = ext2_new_blocks(inode,goal,&count,err);
     if (*err)
+    {
+      printf("ext2_alloc_blocks: ext2_new_blocks failed, err=%d\n",*err);
       goto failed_out;
+    }
 
     target -= count;
     /* allocate blocks for indirect blocks */
