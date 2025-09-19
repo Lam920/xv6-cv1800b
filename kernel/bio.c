@@ -116,9 +116,22 @@ void
 bwrite(struct buf *b)
 {
   if(!holdingsleep(&b->lock))
+  {
+    printf("bwrite: not holding lock\n");
     panic("bwrite");
-  //virtio_disk_rw(b, 1);
-  ramdiskrw(b, 1);
+  }
+  if (b->dev == SDCARD)
+  {
+#ifdef DEBUG_EXT2
+    printf("bwrite: writing block %d to SD card\n", b->blockno);
+#endif
+    int result = sd_write_ext2(b->dev, b->blockno, (char *)b->data);
+    if (result < 0) {
+        printf("bwrite: sd write failed for block %d\n", b->blockno);
+    }
+  }
+  else
+    ramdiskrw(b, 1);
 }
 
 // Release a locked buffer.

@@ -150,10 +150,6 @@ installrootfs(void)
 
   fst->ops->fs_init(); // To avoid empty struct
 
-  fst->iops->dummy(); // To avoid empty struct
-
-  rootfs->fs_t->iops->dummy(); // To avoid empty struct
-
   acquire(&vfsmlist.lock);
   list_add_tail(&(rootfs->fs_next), &(vfsmlist.fs_list));
   release(&vfsmlist.lock);
@@ -593,7 +589,6 @@ namex(char *path, int nameiparent, char *name)
 #ifdef DEBUG
     printf("namex: starting at root\n");
 #endif
-    rootfs->fs_t->iops->dummy(); // To avoid empty struct
     ip = rootfs->fs_t->ops->getroot(ROOTDEV, ROOTDEV);
   }
   else

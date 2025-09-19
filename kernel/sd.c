@@ -338,12 +338,12 @@ sd_init(void)
 }
 
 int dummy_ext2_read(int user_dst, uint64 dst, int n){
-  printf("dummy_ext2_read called: user_dst %d, dst %p, n %d\n", user_dst, (void*)dst, n);
+  // printf("dummy_ext2_read called: user_dst %d, dst %p, n %d\n", user_dst, (void*)dst, n);
   return 0;
 }
 
 int dummy_ext2_write(int user_src, uint64 src, int n){
-  printf("dummy_ext2_write called: user_src %d, src %p, n %d\n", user_src, (void*)src, n);
+  // printf("dummy_ext2_write called: user_src %d, src %p, n %d\n", user_src, (void*)src, n);
   return 0; 
 }
 
@@ -363,6 +363,26 @@ int sd_read_ext2(int dev, uint32_t blockno, char *buf)
     if (bytes != EXT2_DEFAULT_BLOCK_SIZE) {
       error("sd_read_ext2 failed\n");
       return -1;  
+    }
+    return 0;
+}
+
+int sd_write_ext2(int dev, uint32_t blockno, char *buf)
+{
+    if (dev != SDCARD)
+        return -1;
+    
+    /* Calculate ext2 offset based on SECTOR size of disk */
+    uint32_t ext2_offset = ptinfo[1].lba * SECTOR_SIZE;
+    
+    acquire(&sdlock);
+    emmc_seek(&sd0, (uint64_t)(ext2_offset + blockno * EXT2_DEFAULT_BLOCK_SIZE));
+    size_t bytes = emmc_write(&sd0, buf, EXT2_DEFAULT_BLOCK_SIZE);
+    release(&sdlock);
+    
+    if (bytes != EXT2_DEFAULT_BLOCK_SIZE) {
+        error("sd write ext2 failed\n");
+        return -1;
     }
     return 0;
 }

@@ -94,27 +94,61 @@ static inline int ____ilog2_NaN(void)
 }
 
 /* ---- bit test ---- */
-static inline int test_bit(long nr, const volatile unsigned long *addr)
-{
-    return ((*addr >> nr) & 1UL);
+static inline int test_bit(uint32_t nr, const void *addr) {
+    const uint8_t *p = (const uint8_t *)addr;
+    return (p[nr / 8] >> (nr % 8)) & 1;
 }
 
-/* ---- atomic bit ops ---- */
+#ifndef BITS_PER_LONG
+#define BITS_PER_LONG (sizeof(unsigned long) * 8)
+#endif
+
 static inline int test_and_set_bit(long nr, volatile unsigned long *addr)
 {
-    unsigned long mask = 1UL << nr;
-    unsigned long old;
-    __atomic_fetch_or(addr, mask, __ATOMIC_ACQ_REL);
-    old = __atomic_load_n(addr, __ATOMIC_RELAXED);
+    /* Check if address is properly aligned for atomic operations */
+    if ((unsigned long)addr % sizeof(unsigned long)) {
+        /* Unaligned access - use non-atomic version with compiler barrier */
+        unsigned long mask = 1UL << (nr % BITS_PER_LONG);
+        volatile unsigned long *word = addr + (nr / BITS_PER_LONG);
+        unsigned long old = *word;
+        
+        *word = old | mask;
+        __asm__ __volatile__ ("" : : : "memory"); /* Compiler barrier */
+        
+        return !!(old & mask);
+    }
+    
+    /* Aligned access - use proper atomic operations */
+    unsigned long mask = 1UL << (nr % BITS_PER_LONG);
+    volatile unsigned long *word = addr + (nr / BITS_PER_LONG);
+    
+    /* Use atomic fetch-or with acquire-release semantics */
+    unsigned long old = __atomic_fetch_or(word, mask, __ATOMIC_ACQ_REL);
     return !!(old & mask);
 }
 
+
 static inline int test_and_clear_bit(long nr, volatile unsigned long *addr)
 {
-    unsigned long mask = 1UL << nr;
-    unsigned long old;
-    __atomic_fetch_and(addr, ~mask, __ATOMIC_ACQ_REL);
-    old = __atomic_load_n(addr, __ATOMIC_RELAXED);
+    /* Check if address is properly aligned for atomic operations */
+    if ((unsigned long)addr % sizeof(unsigned long)) {
+        /* Unaligned access - use non-atomic version with compiler barrier */
+        unsigned long mask = 1UL << (nr % BITS_PER_LONG);
+        volatile unsigned long *word = addr + (nr / BITS_PER_LONG);
+        unsigned long old = *word;
+        
+        *word = old & ~mask;
+        __asm__ __volatile__ ("" : : : "memory"); /* Compiler barrier */
+        
+        return !!(old & mask);
+    }
+    
+    /* Aligned access - use proper atomic operations */
+    unsigned long mask = 1UL << (nr % BITS_PER_LONG);
+    volatile unsigned long *word = addr + (nr / BITS_PER_LONG);
+    
+    /* Use atomic fetch-and with acquire-release semantics */
+    unsigned long old = __atomic_fetch_and(word, ~mask, __ATOMIC_ACQ_REL);
     return !!(old & mask);
 }
 
