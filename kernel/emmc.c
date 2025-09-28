@@ -403,6 +403,7 @@ size_t emmc_read(struct emmc *self, void *buf, size_t cnt)
         return -1;
     }
     uint32_t blockno = self->offset / SD_BLOCK_SIZE;
+    
     trace("nblock: 0x%x, offset: 0x%llx", blockno, self->offset);
     if (emmc_do_read(self, (uint8_t *) buf, cnt, blockno) != cnt) {
         return -1;
@@ -415,8 +416,10 @@ size_t emmc_write(struct emmc *self, void *buf, size_t cnt)
     if (self->offset % SD_BLOCK_SIZE != 0) {
         return -1;
     }
+    
     uint32_t blockno = self->offset / SD_BLOCK_SIZE;
 
+    // printf("emmc_write: nbyte %d, offset %d and blockno: %d and buf: %s\n", (int)cnt, (int)self->offset, blockno, (char *)buf);
     if (emmc_do_write(self, (uint8_t *) buf, cnt, blockno) != cnt) {
         return -1;
     }
@@ -1215,12 +1218,19 @@ static int emmc_ensure_data_mode(struct emmc *self)
 static int emmc_do_data_command(struct emmc *self, int is_write, uint8_t * buf,
                      size_t buf_size, uint32_t block_no)
 {
-
     /* 1. Physical layer v.3 table 4.20 - SDSCカードはブロックアドレスではなくバイトアドレスを使う */
     if (!self->card_supports_sdhc) {
         debug("use byte address");
+#ifdef DEBUG_EXT2
+        printf("***************use byte address\n");
+#endif
         block_no *= SD_BLOCK_SIZE;
     }
+#ifdef DEBUG_EXT2
+    else {
+        printf("***************use block address\n");
+    }
+#endif
 
     /* 2. SD Host v.3 3.7.2.1によるデータ転送 */
     if (buf_size < self->block_size) {
@@ -1229,12 +1239,26 @@ static int emmc_do_data_command(struct emmc *self, int is_write, uint8_t * buf,
     }
 
     self->blocks_to_transfer = buf_size / self->block_size;
+#ifdef DEBUG_EXT2
+    printf("blocks_to_transfer: %d and block_no: %d\n", self->blocks_to_transfer, block_no);
+#endif
     if (buf_size % self->block_size) {
         warn("buffer size (%d) not a multiple of block size (%d)",
              buf_size, self->block_size);
         return -1;
     }
     self->buf = buf;
+
+#ifdef DEBUG_EXT2
+    if (is_write) {
+        printf("emmc_do_data_command: write self->buf: \n");
+        for (int i = 0; i < 32; i++) {   // show first 32 bytes
+            printf("%d", test_bit(i, (unsigned long *)self->buf));
+        }
+        printf("\n");
+    }
+#endif
+
     trace("%s %d blocks from 0x%08x", is_write ? "write" : "read", self->blocks_to_transfer, block_no);
     /* 3. 使用するコマンドを決定（Read/Write. Single/Multi) */
     int command;
@@ -1524,7 +1548,7 @@ static int emmc_card_reset(struct emmc *self)
 
     }
 
-    trace("OCR: 0x%x, 1.8v support: %d, SDHC support: %d", self->card_ocr,
+    printf("==== OCR: 0x%x, 1.8v support: %d, SDHC support: %d ==== ", self->card_ocr,
           self->card_supports_18v, self->card_supports_sdhc);
 
     /* この時点でカードがSDカードであると確信できた。そのため、このカードは

@@ -12,11 +12,17 @@
 #include "include/find_bits.h"
 #include "bitops.h"
 
+unsigned long ext2_block_group_desc_block[MAX_BLOCK_GROUP_DESC];
+
 #define in_range(b, first, len) ((b) >= (first) && (b) <= (first) + (len) - 1)
 #define ext2_find_next_zero_bit find_next_zero_bit
 #define ext2_test_bit test_bit
 #define ext2_set_bit_atomic test_and_set_bit
 #define ext2_clear_bit_atomic test_and_clear_bit
+
+void dump_block_group_desc(struct ext2_group_desc *gdp);
+
+static void ext2_free_inode (struct inode * inode);
 
 static int ext2_block_to_path(struct inode *inode,
                    long i_block, int offsets[4], int *boundary);
@@ -81,6 +87,14 @@ static struct {
   struct ext2_sb_info sb[MAXVFSSIZE];
 } ext2_sb_pool; // It is a Pool of S5 Superblock Filesystems
 
+
+struct ext2_group_desc_tmp_buf{
+  struct spinlock lock;
+  struct buf buf;
+};
+
+struct ext2_group_desc_tmp_buf ext2_group_desc_tmp_buf;
+
 struct ext2_sb_info*
 alloc_ext2_sb()
 {
@@ -144,6 +158,7 @@ initext2fs(void)
   printf("Registering ext2 filesystem...\n");
   initlock(&ext2_sb_pool.lock, "ext2_sb_pool");
   /* initlock(&ext2_inode_pool.lock, "ext2_inode_pool"); */
+  initlock(&ext2_group_desc_tmp_buf.lock, "ext2_group_desc_tmp_buf");
   return register_fs(&ext2fs);
 }
 
@@ -252,6 +267,9 @@ ext2_get_group_desc(struct superblock * sb,
   unsigned long offset;
   struct ext2_group_desc * desc;
   struct ext2_sb_info *sbi = EXT2_SB(sb);
+  static unsigned int old_block_group = -1;
+
+  unsigned long block = 0;
 
   if (block_group >= sbi->s_groups_count) {
     panic("Block group # is too large");
@@ -259,13 +277,35 @@ ext2_get_group_desc(struct superblock * sb,
 
   group_desc = block_group >> EXT2_DESC_PER_BLOCK_BITS(sb);
   offset = block_group & (EXT2_DESC_PER_BLOCK(sb) - 1);
-  if (!sbi->s_group_desc[group_desc]) {
-    panic("Accessing a group descriptor not loaded");
+  // if (!sbi->s_group_desc[group_desc]) {
+  //   panic("Accessing a group descriptor not loaded");
+  // }
+
+  block = ext2_block_group_desc_block[group_desc];
+  if (old_block_group != block_group) {
+    old_block_group = block_group;
   }
+  if (bh)
+    sbi->s_group_desc[group_desc] = ext2_ops.bread(sb->minor, block);
+#ifdef DEBUG_EXT2
+  printf("ext2_get_group_desc: offset: %ld and block_group: %d and group_desc: %d\n", offset, block_group, group_desc);
+#endif
+  acquire(&ext2_group_desc_tmp_buf.lock);
+  memmove(&ext2_group_desc_tmp_buf.buf, sbi->s_group_desc[group_desc], DSIZE);
+  release(&ext2_group_desc_tmp_buf.lock);
 
   desc = (struct ext2_group_desc *) sbi->s_group_desc[group_desc]->data;
+  // desc = (struct ext2_group_desc *) ext2_group_desc_tmp_buf.buf.data;
+  dump_block_group_desc(desc);
   if (bh) {
     *bh = sbi->s_group_desc[group_desc];
+    desc = (struct ext2_group_desc *) sbi->s_group_desc[group_desc]->data;
+  }
+  else {
+#ifdef DEBUG_EXT2
+    printf("...ext2_get_group_desc: bh is NULL\n");
+#endif
+    // brelse(sbi->s_group_desc[group_desc]);
   }
   return desc + offset;
 }
@@ -406,12 +446,25 @@ ext2_readsb(int dev, struct superblock *sb)
 
   for (i = 0; i < db_count; i++) {
     block = descriptor_loc(sb, logic_sb_block, i);
-    sbi->s_group_desc[i] = ext2_ops.bread(dev, block);
-    if (!sbi->s_group_desc[i]) {
-      panic("Error on read ext2  group descriptor");
-    }
-    ext2_ops.brelse(sbi->s_group_desc[i]);
+    ext2_block_group_desc_block[i] = block;  
+    // sbi->s_group_desc[i] = ext2_ops.bread(dev, block);
+    // if (!sbi->s_group_desc[i]) {
+    //   panic("Error on read ext2  group descriptor");
+    // }
+    // dump_block_group_desc((struct ext2_group_desc *)sbi->s_group_desc[i]->data);
+    // releasesleep(&sbi->s_group_desc[i]->lock);
+    // ext2_ops.brelse()
   }
+
+  for (i = db_count; i < MAX_BLOCK_GROUP_DESC; i++) {
+    ext2_block_group_desc_block[i] = 0;
+  }
+
+  printf("Dump of block group desc block index \n");
+  for (i = 0; i < MAX_BLOCK_GROUP_DESC; i++) {
+    printf(" %ld ", ext2_block_group_desc_block[i]);
+  }
+  printf("\n");
 
   sbi->s_gdb_count = db_count;
 }
@@ -426,13 +479,18 @@ static struct buf *
 read_inode_bitmap(struct superblock * sb, unsigned long block_group)
 {
   struct ext2_group_desc *desc;
+  unsigned long inode_bitmap_block = 0;
   struct buf *bh = 0;
-
+#ifdef DEBUG_EXT2
+  printf("read_inode_bitmap: ext2_get_group_desc\n");
+#endif
   desc = ext2_get_group_desc(sb, block_group, 0);
+  inode_bitmap_block = desc->bg_inode_bitmap;
   if (!desc)
     panic("error on read ext2 inode bitmap");
 
-  bh = ext2_ops.bread(sb->minor, desc->bg_inode_bitmap);
+  
+  bh = ext2_ops.bread(sb->minor, inode_bitmap_block);
   if (!bh)
     panic("error on read ext2 inode bitmap");
   return bh;
@@ -440,7 +498,11 @@ read_inode_bitmap(struct superblock * sb, unsigned long block_group)
 
 void dump_block_group_desc(struct ext2_group_desc *gdp)
 {
+#ifdef DEBUG_EXT2
   printf("bg_block_bitmap: %u\n", gdp->bg_block_bitmap);
+  if (gdp->bg_block_bitmap > 1000) {
+    panic("dump_block_group_desc: bg_block_bitmap too large\n");
+  }
   printf("bg_inode_bitmap: %u\n", gdp->bg_inode_bitmap);
   printf("bg_inode_table: %u\n", gdp->bg_inode_table);
   printf("bg_free_blocks_count: %u\n", gdp->bg_free_blocks_count);
@@ -450,6 +512,7 @@ void dump_block_group_desc(struct ext2_group_desc *gdp)
   printf("bg_reserved[0]: %u\n", gdp->bg_reserved[0]);
   printf("bg_reserved[1]: %u\n", gdp->bg_reserved[1]);
   printf("bg_reserved[2]: %u\n", gdp->bg_reserved[2]);
+#endif
 }
 
 /**
@@ -459,6 +522,37 @@ void dump_block_group_desc(struct ext2_group_desc *gdp)
  * Our implementation will take an linear search over the inode bitmap
  * and get the first free inode.
  */
+
+static void dump_inode_block(struct ext2_inode *inode)
+{
+#ifdef DEBUG_EXT2
+  int i;
+  printf("Dump of inode with link_count:%d\n", inode->i_links_count);
+  for (i = 0; i < 12; i++) {
+    printf("i_block[%d]: %u ", i, inode->i_block[i]);
+  }
+  printf("\n");
+#endif
+}
+
+
+void debug_bitmap_range(unsigned long *bitmap, uint32_t start_bit, uint32_t count)
+{
+#ifdef DEBUG_EXT2
+    printf("Bitmap debug range [%d - %d]:\n", start_bit, start_bit + count - 1);
+    
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t current_bit = start_bit + i;
+        int bit_value = ext2_test_bit(current_bit, bitmap);
+        
+        printf("  bit[%d] = %d", current_bit, bit_value);
+        
+        if (i % 8 == 7) printf("\n");
+    }
+    printf("\n");
+#endif
+}
+
 struct inode*
 ext2_ialloc(uint dev, short type)
 {
@@ -477,31 +571,49 @@ ext2_ialloc(uint dev, short type)
   for(i = 0; i < sbi->s_groups_count; i++) {
     gdp = ext2_get_group_desc(&sb[dev], group, &bh2);
     // Check if we already hold the lock
-    if (!holdingsleep(&bh2->lock)) {
-        acquiresleep(&bh2->lock);
-    }
+#ifdef DEBUG_EXT2
+    printf("-----> Holding lock for group desc\n");
+#endif
+    // if (!holdingsleep(&bh2->lock)) {
+    //     acquiresleep(&bh2->lock);
+    // }
 
 #ifdef DEBUG_EXT2
     printf("Dump of block group descriptor of group %d\n", group);
     dump_block_group_desc(gdp);
+    printf("Done dump of block group\n");
 #endif
-
     if (bitmap_bh)
       ext2_ops.brelse(bitmap_bh);
 
+#ifdef DEBUG_EXT2
+    printf("Start to read inode bitmap\n");
+#endif
+
     bitmap_bh = read_inode_bitmap(&sb[dev], group);
+
+#ifdef DEBUG_EXT2
+    printf("Dump of inode bitmap before allocation\n");
+    debug_bitmap_range((unsigned long *)bitmap_bh->data, 0, 32);
+#endif
+
     ino = 0;
 
 repeat_in_this_group:
     ino = ext2_find_next_zero_bit((unsigned long *)bitmap_bh->data,
                                   EXT2_INODES_PER_GROUP(&sb[dev]), ino);
+#ifdef DEBUG_EXT2
+    printf(":>>>>>>>>>>>>>>> Found next zero bit at ino: %lu\n", ino);
+#endif
     if (ino >= EXT2_INODES_PER_GROUP(&sb[dev])) {
       if (++group == sbi->s_groups_count)
         group = 0;
       continue;
     }
     if (ext2_set_bit_atomic(ino, (unsigned long *)bitmap_bh->data)) {
+#ifdef DEBUG_EXT2
       printf("We lost this inode\n");
+#endif
       /* we lost this inode */
       if (++ino >= EXT2_INODES_PER_GROUP(&sb[dev])) {
         /* this group is exhausted, try next group */
@@ -512,6 +624,10 @@ repeat_in_this_group:
       /* try to find free inode in the same group */
       goto repeat_in_this_group;
     }
+#ifdef DEBUG_EXT2
+    printf("Dump of inode bitmap after allocation\n");
+    debug_bitmap_range((unsigned long *)bitmap_bh->data, 0, 32);
+#endif
     goto got;
   }
 
@@ -521,6 +637,9 @@ repeat_in_this_group:
   panic("no space to alloc inode");
 
 got:
+#ifdef DEBUG_EXT2
+  printf("Writing back inode bitmap\n");
+#endif
   ext2_ops.bwrite(bitmap_bh);
   ext2_ops.brelse(bitmap_bh);
 
@@ -535,9 +654,13 @@ got:
 
   ext2_ops.bwrite(bh2);
   // Only release if we acquired it here
-  if (!holdingsleep(&bh2->lock)) {
-      releasesleep(&bh2->lock);
-  }
+#ifdef DEBUG_EXT2
+  printf("------> Release lock for group desc\n");
+#endif
+  // if (holdingsleep(&bh2->lock)) {
+  //     releasesleep(&bh2->lock);
+  // }
+  ext2_ops.brelse(bh2);
 
 
   raw_inode = ext2_get_inode(&sb[dev], ino, &ibh);
@@ -631,6 +754,9 @@ ext2_iupdate(struct inode *ip)
   raw_inode->i_blocks = ei->i_ei.i_blocks;
   raw_inode->i_links_count = ip->nlink;
   memmove(raw_inode->i_block, ei->i_ei.i_block, sizeof(ei->i_ei.i_block));
+// #ifdef DEBUG_EXT2
+  dump_inode_block(raw_inode);
+// #endif
   raw_inode->i_size = ip->size;
 
   ext2_ops.bwrite(bp);
@@ -647,6 +773,9 @@ void
 ext2_free_blocks(struct inode * inode, unsigned long block,
                   unsigned long count)
 {
+#ifdef DEBUG_EXT2
+  printf("ext2_free_blocks\n");
+#endif
   struct buf *bitmap_bh = 0;
   struct buf * bh2;
   unsigned long block_group;
@@ -662,6 +791,8 @@ ext2_free_blocks(struct inode * inode, unsigned long block,
   if (block < es->s_first_data_block ||
       block + count < block ||
       block + count > es->s_blocks_count) {
+    printf("ext2_free_blocks: bad block %lu count %lu\n",
+           block, count);
     panic("ext2 free blocks in not datazone");
   }
 
@@ -682,11 +813,20 @@ do_more:
 
   bitmap_bh = read_block_bitmap(superb, block_group);
   if (!bitmap_bh)
+  {
+    printf("Cannot read block bitmap\n");
     goto error_return;
-
+  }
   desc = ext2_get_group_desc(superb, block_group, &bh2);
-  if (!desc)
+  if (!desc) {
+    printf("Cannot get group desc\n");
     goto error_return;
+  }
+    
+  
+  // if (!holdingsleep(&bh2->lock)) {
+  //       acquiresleep(&bh2->lock);
+  // }
 
   if (in_range (desc->bg_block_bitmap, block, count) ||
       in_range (desc->bg_inode_bitmap, block, count) ||
@@ -697,17 +837,31 @@ do_more:
     panic("Freeing blocks on system zone");
     goto error_return;
   }
-
+#ifdef DEBUG_EXT2
+  printf("ext2_free_blocks: count: %d\n", count);
+#endif
   for (i = 0, group_freed = 0; i < count; i++) {
+#ifdef DEBUG_EXT2
+    printf("Before clear bit[i]: %d and bit[i+1]: %d\n", ext2_test_bit(bit + i, (unsigned long *)bitmap_bh->data), ext2_test_bit(bit + i + 1, (unsigned long *)bitmap_bh->data));
+    
+    debug_bitmap_range((unsigned long *)bitmap_bh->data, (bit - 5) < 0 ? 0 : (bit - 5), 32);
+    printf("Clear bit: %d\n", bit + i);
+#endif
     if (!ext2_clear_bit_atomic(bit + i, (unsigned long *)bitmap_bh->data)) {
       panic("ext2 bit already cleared for block");
     } else {
       group_freed++;
     }
+
+    debug_bitmap_range((unsigned long *)bitmap_bh->data, (bit - 5) < 0 ? 0 : (bit - 5), 32);
   }
 
   ext2_ops.bwrite(bitmap_bh);
   group_adjust_blocks(superb, block_group, desc, bh2, group_freed);
+  // if (holdingsleep(&bh2->lock)) {
+  //     releasesleep(&bh2->lock);
+  // }
+  ext2_ops.brelse(bh2);
   freed += group_freed;
 
   if (overflow) {
@@ -716,7 +870,12 @@ do_more:
     goto do_more;
   }
 error_return:
+  // if (holdingsleep(&bh2->lock)) {
+  //     releasesleep(&bh2->lock);
+  // }
   ext2_ops.brelse(bitmap_bh);
+  if (holdingsleep(&bh2->lock))
+    ext2_ops.brelse(bh2);
 }
 
 /**
@@ -734,7 +893,9 @@ ext2_free_data(struct inode *inode, uint32 *p, uint32 *q)
 {
   unsigned long block_to_free = 0, count = 0;
   unsigned long nr;
-
+#ifdef DEBUG_EXT2
+  printf("ext2_free_data\n");
+#endif
   for ( ; p < q ; p++) {
     nr = *p;
     if (nr) {
@@ -769,6 +930,9 @@ free_this:
 static void
 ext2_free_branches(struct inode *inode, uint32 *p, uint32 *q, int depth)
 {
+#ifdef DEBUG_EXT2
+  printf("ext2_free_branches\n");
+#endif
   struct buf * bh;
   unsigned long nr;
 
@@ -813,12 +977,20 @@ ext2_release_inode(struct superblock *sb, int group, int dir)
     return;
   }
 
+  // if (!holdingsleep(&bh->lock)) {
+  //   acquiresleep(&bh->lock);
+  // }
+
   /* spin_lock(sb_bgl_lock(EXT2_SB(sb), group)); */
   desc->bg_free_inodes_count += 1;
   if (dir)
     desc->bg_used_dirs_count -= 1;
   /* spin_unlock(sb_bgl_lock(EXT2_SB(sb), group)); */
   ext2_ops.bwrite(bh);
+  // if (holdingsleep(&bh->lock)) {
+  //   releasesleep(&bh->lock);
+  // }
+  ext2_ops.brelse(bh);
 }
 
 /*
@@ -837,9 +1009,13 @@ ext2_release_inode(struct superblock *sb, int group, int dir)
  * though), and then we'd have two inodes sharing the
  * same inode number and space on the harddisk.
  */
-void
+static void
 ext2_free_inode (struct inode * inode)
 {
+#ifdef DEBUG_EXT2
+  // backtrace();
+  printf("Do free inode\n");
+#endif
   struct superblock *superb = &sb[inode->dev];
   int is_directory;
   unsigned long ino;
@@ -863,16 +1039,24 @@ ext2_free_inode (struct inode * inode)
 
   block_group = (ino - 1) / EXT2_INODES_PER_GROUP(superb);
   bit = (ino - 1) % EXT2_INODES_PER_GROUP(superb);
+#ifdef DEBUG_EXT2
+  printf("ext2_free_inode get inode bitmap to clear\n");
+#endif
   bitmap_bh = read_inode_bitmap(superb, block_group);
   if (!bitmap_bh)
     return;
 
   /* Ok, now we can actually update the inode bitmaps.. */
+#ifdef DEBUG_EXT2
+  printf("********** clear bit: %d \n", bit);
+#endif
   if (!ext2_clear_bit_atomic(bit, (void *) bitmap_bh->data))
     panic("ext2 bit already cleared");
   else
     ext2_release_inode(superb, block_group, is_directory);
-
+#ifdef DEBUG_EXT2
+  printf("ext2_free_inode write to inode bitmap\n");
+#endif
   ext2_ops.bwrite(bitmap_bh);
   ext2_ops.brelse(bitmap_bh);
 }
@@ -880,6 +1064,10 @@ ext2_free_inode (struct inode * inode)
 void
 ext2_itrunc(struct inode *ip)
 {
+#ifdef DEBUG_EXT2
+  printf("Call ext2_itrunc\n");
+  backtrace();
+#endif
   uint32 *i_data;
   int offsets[4];
   uint32 nr = 0;
@@ -932,7 +1120,10 @@ ext2_itrunc(struct inode *ip)
   }
 
   // unlock the inode here
-  ext2_free_inode(ip);
+  // ext2_free_inode(ip);
+#ifdef DEBUG_EXT2
+  printf("ext2_itrunc for inum: %d\n", ip->inum);
+#endif
 
   ext2_iops.iupdate(ip);
 }
@@ -940,6 +1131,16 @@ ext2_itrunc(struct inode *ip)
 void
 ext2_cleanup(struct inode *ip)
 {
+  /* Free inode bitmap if neccessary, call when unlink */
+#ifdef DEBUG_EXT2
+  printf("@@@@@@@@@@@ Clean up with info: ip->ref: %d, ip->flags: %d, ip->nlink: %d\n", ip->ref, ip->flags, ip->nlink);
+#endif
+  if (ip->ref == 0 && (ip->flags == 0) && ip->nlink == 0) {
+#ifdef DEBUG_EXT2
+    printf("############ now free inode: %d\n", ip->inum);
+#endif
+    ext2_free_inode(ip);
+  }
   memset(ip->i_private, 0, sizeof(struct ext2_inode_info));
 }
 
@@ -1373,34 +1574,14 @@ repeat:
   }
   start = grp_goal;
 
-#ifdef DEBUG
+#ifdef DEBUG_EXT2
   printf("ext2_try_to_allocate: start=%d, end=%d\n", start, end);
 
-  static int counter = 0;
-  if (counter == 0){
-    int blocks_per_group = EXT2_BLOCKS_PER_GROUP(sb);
-    // Dump the bitmap in a readable format
-    for (int i = 0; i < blocks_per_group; i++) {
-        if (i % 64 == 0) {
-            printf("\n%04d: ", i);  // Print block number every 64 blocks
-        }
-        
-        if (ext2_test_bit(i, (unsigned long *)bitmap_bh->data)) {
-            printf("1");  // Block is allocated
-        } else {
-            printf("0");  // Block is free
-        }
-        
-        if (i % 8 == 7) {
-            printf(" ");  // Space every 8 bits for readability
-        }
-    }
-    printf("\n");
-    counter = 1;
-  }
   printf("ext2_try_to_allocate: trying block %d, bitmap value before: %d\n", 
        grp_goal, ext2_test_bit(grp_goal, (unsigned long *)bitmap_bh->data));
 #endif
+
+    debug_bitmap_range((unsigned long *)bitmap_bh->data, (grp_goal - 5) < 0 ? 0 : (grp_goal - 5), 32);
 
   if (ext2_set_bit_atomic(grp_goal,
                           (unsigned long *)bitmap_bh->data)) {
@@ -1427,6 +1608,10 @@ repeat:
     num++;
     grp_goal++;
   }
+#ifdef DEBUG_EXT2
+  printf(".. after allocate block: %d and check bit: %d\n", grp_goal, ext2_test_bit(grp_goal, (unsigned long *)bitmap_bh->data));
+#endif
+  debug_bitmap_range((unsigned long *)bitmap_bh->data, grp_goal - 5, 32);
   *count = num;
   return grp_goal - num;
 fail_access:
@@ -1516,12 +1701,25 @@ retry_alloc:
   gdp = ext2_get_group_desc(superb, group_no, &gdp_bh);
   if (!gdp)
     goto io_error;
+  // if (!holdingsleep(&gdp_bh->lock)) {
+  //   acquiresleep(&gdp_bh->lock);
+  // }
 
   free_blocks = gdp->bg_free_blocks_count;
 
   if (free_blocks > 0) {
     grp_target_blk = ((goal - es->s_first_data_block) %
                       EXT2_BLOCKS_PER_GROUP(superb));
+
+    // if (!bitmap_bh) {
+    //    if (holdingsleep(&bitmap_bh->lock)) {
+    //       releasesleep(&bitmap_bh->lock);
+    //     }
+    // }
+    // if (holdingsleep(&bitmap_bh->lock)) {
+    //   releasesleep(&bitmap_bh->lock);
+    // }
+
     bitmap_bh = read_block_bitmap(superb, group_no);
     if (!bitmap_bh)
       goto io_error;
@@ -1545,9 +1743,20 @@ retry_alloc:
     group_no++;
     if (group_no >= ngroups)
       group_no = 0;
+    
+    if (gdp_bh) {
+      if (holdingsleep(&gdp_bh->lock)) {
+        // releasesleep(&gdp_bh->lock);
+        ext2_ops.brelse(gdp_bh);
+      } 
+    }
     gdp = ext2_get_group_desc(superb, group_no, &gdp_bh);
     if (!gdp)
       goto io_error;
+
+    // if (!holdingsleep(&gdp_bh->lock)) {
+    //   acquiresleep(&gdp_bh->lock);
+    // }
 
     free_blocks = gdp->bg_free_blocks_count;
     /*
@@ -1591,6 +1800,13 @@ allocated:
 
   group_adjust_blocks(superb, group_no, gdp, gdp_bh, -num);
 
+  // if (holdingsleep(&gdp_bh->lock)) {
+  //     releasesleep(&gdp_bh->lock);
+  // }
+  ext2_ops.brelse(gdp_bh);
+#ifdef DEBUG_EXT2
+  printf("... Write block bitmap:\n");
+#endif
   ext2_ops.bwrite(bitmap_bh);
 
   *errp = 0;
@@ -1614,6 +1830,12 @@ out:
   /*   mark_inode_dirty(inode); */
   /* } */
   ext2_ops.brelse(bitmap_bh);
+  if (gdp_bh) {
+    if (holdingsleep(&gdp_bh->lock)) {
+      // releasesleep(&gdp_bh->lock);
+      ext2_ops.brelse(gdp_bh);
+    }
+  }
   return 0;
 }
 
@@ -1883,7 +2105,7 @@ ext2_ilock(struct inode *ip)
     } else if (S_ISCHR(raw_inode->i_mode) || S_ISBLK(raw_inode->i_mode)) {
       ip->type = T_DEVICE;
     } else {
-      panic("ext2: invalid file mode");
+      panic("ext2: invalid file mode at 1");
     }
     ip->nlink = raw_inode->i_links_count;
     ip->size = raw_inode->i_size;
@@ -2082,6 +2304,10 @@ ext2_unlink(struct inode *dp, uint off)
   struct ext2_dir_entry_2 *dir;
   int chunk_size;
 
+#ifdef DEBUG_EXT2
+  printf("ext2_unlink: off=%d\n", off);
+#endif
+
   chunk_size = sb[dp->dev].blocksize;
   bn = off / sb[dp->dev].blocksize;
   offset = off % sb[dp->dev].blocksize;
@@ -2135,6 +2361,7 @@ static struct ext2_inode *
 ext2_get_inode(struct superblock *sb, uint ino, struct buf **bh)
 {
   struct buf * bp;
+  struct buf *bh2;
   unsigned long block_group;
   unsigned long block;
   unsigned long offset;
@@ -2144,18 +2371,34 @@ ext2_get_inode(struct superblock *sb, uint ino, struct buf **bh)
   if ((ino != EXT2_ROOT_INO && ino < EXT2_FIRST_INO(sb)) ||
        ino > EXT2_SB(sb)->s_es->s_inodes_count)
     panic("Ext2 invalid inode number");
-
+#ifdef DEBUG_EXT2
+  printf("ext2_get_inode: get group desc\n");
+#endif
   block_group = (ino - 1) / EXT2_INODES_PER_GROUP(sb);
-  gdp = ext2_get_group_desc(sb, block_group, 0);
+  gdp = ext2_get_group_desc(sb, block_group, &bh2);
   if (!gdp)
     panic("Invalid group descriptor at ext2_get_inode");
 
+#ifdef DEBUG_EXT2
+  printf("ext2_get_inode: get group desc done for ino: %d of block_group: %d\n", ino, block_group);
+#endif
   /*
    * Figure out the offset within the block group inode table
    */
   offset = ((ino - 1) % EXT2_INODES_PER_GROUP(sb)) * EXT2_INODE_SIZE(sb);
+#ifdef DEBUG_EXT2
+  printf("ext2_get_inode: offset : %d and bg_inode_table: %d\n", offset, gdp->bg_inode_table);
+#endif
   block = gdp->bg_inode_table +
     (offset >> EXT2_BLOCK_SIZE_BITS(sb));
+  ext2_ops.brelse(bh2);
+
+#ifdef DEBUG_EXT2
+  printf("ext2_get_inode: read bp for block: %ld\n", block);
+  if (!bh) {
+    printf("##### ext2_get_inode: NULL bh\n");
+  }
+#endif
 
   if (!(bp = ext2_ops.bread(sb->minor, block)))
     panic("Error on read the  block inode");
@@ -2164,6 +2407,13 @@ ext2_get_inode(struct superblock *sb, uint ino, struct buf **bh)
   raw_inode = (struct ext2_inode *)(bp->data + offset);
   if (bh)
     *bh = bp;
+  else {
+    ext2_ops.brelse(bp);
+  }
+
+#ifdef DEBUG_EXT2
+  printf("ext2_get_inode: return raw inode\n");
+#endif
 
   return raw_inode;
 }
@@ -2176,6 +2426,10 @@ ext2_fill_inode(struct inode *ip) {
   struct ext2_inode_info *ei;
   struct ext2_inode *raw_inode;
   struct buf *bh;
+
+#ifdef DEBUG_EXT2
+  printf("ext2_fill_inode with inum: %d\n", ip->inum);
+#endif
 
   ei = alloc_ext2_inode_info();
 
@@ -2196,7 +2450,8 @@ ext2_fill_inode(struct inode *ip) {
   } else if (S_ISCHR(ei->i_ei.i_mode) || S_ISBLK(ei->i_ei.i_mode)) {
     ip->type = T_DEVICE;
   } else {
-    panic("ext2: invalid file mode");
+    printf("ext2: invalid file mode at  with i_mode: %d", ei->i_ei.i_mode);
+    panic("ext2: invalid file mode at 2");
   }
 
   ip->nlink = ei->i_ei.i_links_count;

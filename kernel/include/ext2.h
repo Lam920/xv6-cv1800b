@@ -22,6 +22,10 @@ typedef unsigned long ext2_fsblk_t;
 
 #define EXT2_NAME_LEN 255
 
+#define MAX_BLOCK_GROUP_DESC  32
+
+extern unsigned long ext2_block_group_desc_block[MAX_BLOCK_GROUP_DESC];
+
 /**
  * EXT2_DIR_PAD defines the directory entries boundaries
  *
@@ -96,6 +100,7 @@ enum {
 #define EXT2_TIND_BLOCK   (EXT2_DIND_BLOCK + 1)
 #define EXT2_N_BLOCKS     (EXT2_TIND_BLOCK + 1)
 
+extern struct ext2_group_desc_tmp_buf ext2_group_desc_tmp_buf;
 
 /**
  * This struct is based on the Linux Sorce Code fs/ext2/ext2.h.

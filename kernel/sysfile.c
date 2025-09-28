@@ -216,6 +216,10 @@ sys_unlink(void)
   if(dp->fs_t->ops->namecmp(name, ".") == 0 || dp->fs_t->ops->namecmp(name, "..") == 0)
     goto bad;
 
+#ifdef DEBUG_EXT2
+  printf("sys_unlink: fs_type: %s\n", dp->fs_t->name);
+#endif
+
   if((ip = dp->iops->dirlookup(dp, name, &off)) == 0)
     goto bad;
   ip->iops->ilock(ip);
@@ -235,11 +239,17 @@ sys_unlink(void)
     panic("unlink: writei");
   if(ip->type == T_DIR){
     dp->nlink--;
+#ifdef DEBUG_EXT2
+    printf("Call iupdate at 1\n");
+#endif
     dp->iops->iupdate(dp);
   }
   iunlockput(dp);
 
   ip->nlink--;
+#ifdef DEBUG_EXT2
+  printf("Call iupdate at 2\n");
+#endif
   dp->iops->iupdate(ip);
   iunlockput(ip);
 

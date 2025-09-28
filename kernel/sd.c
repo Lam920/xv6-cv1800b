@@ -347,13 +347,15 @@ int dummy_ext2_write(int user_src, uint64 src, int n){
   return 0; 
 }
 
-int sd_read_ext2(int dev, uint32_t blockno, char *buf)
+int sd_read_ext2(int dev, uint32_t blockno, void *buf)
 {
     if (dev != SDCARD)
         return -1;
 
     //uint32_t sector_per_block = 1024 / SD_BLOCK_SIZE;
-
+#ifdef DEBUG_EXT2
+    printf("sd_read_ext2: blockno %d\n", blockno);
+#endif
     /* Calculate ext2 offset must based on SECTOR size of disk */
     uint32_t ext2_offset = ptinfo[1].lba * SECTOR_SIZE;
     acquire(&sdlock);
@@ -367,7 +369,7 @@ int sd_read_ext2(int dev, uint32_t blockno, char *buf)
     return 0;
 }
 
-int sd_write_ext2(int dev, uint32_t blockno, char *buf)
+int sd_write_ext2(int dev, uint32_t blockno, void *buf)
 {
     if (dev != SDCARD)
         return -1;

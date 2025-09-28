@@ -23,8 +23,11 @@ acquiresleep(struct sleeplock *lk)
 {
   acquire(&lk->lk);
   while (lk->locked) {
+    printf("..acquiresleep: going to sleep on %s at %p\n", lk->name, lk);
+    // backtrace();
     sleep(lk, &lk->lk);
   }
+  // printf("..acquiresleep: acquired and set lock to 1 for %s at %p\n", lk->name, lk);
   lk->locked = 1;
   lk->pid = myproc()->pid;
   release(&lk->lk);
@@ -34,6 +37,7 @@ void
 releasesleep(struct sleeplock *lk)
 {
   acquire(&lk->lk);
+  // printf("..releasesleep: releasing lock and set lock to 0 for %s at %p\n", lk->name, lk);
   lk->locked = 0;
   lk->pid = 0;
   wakeup(lk);

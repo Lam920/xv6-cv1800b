@@ -85,6 +85,9 @@ bget(uint dev, uint blockno)
       b->valid = 0;
       b->refcnt = 1;
       release(&bcache.lock);
+#ifdef DEBUG_EXT2
+      printf("bget: allocated new buffer for dev %d blockno %d\n", dev, blockno);
+#endif
       acquiresleep(&b->lock);
       return b;
     }
@@ -103,7 +106,7 @@ bread(uint dev, uint blockno)
     //virtio_disk_rw(b, 0);
     /* Add function to read from SDCARD */
     if (dev == SDCARD)
-      sd_read_ext2(dev, blockno, (char *)b->data);
+      sd_read_ext2(dev, blockno, b->data);
     else
       ramdiskrw(b, 0);
     b->valid = 1;
@@ -115,6 +118,7 @@ bread(uint dev, uint blockno)
 void
 bwrite(struct buf *b)
 {
+  // backtrace();
   if(!holdingsleep(&b->lock))
   {
     printf("bwrite: not holding lock\n");
@@ -123,9 +127,9 @@ bwrite(struct buf *b)
   if (b->dev == SDCARD)
   {
 #ifdef DEBUG_EXT2
-    printf("bwrite: writing block %d to SD card\n", b->blockno);
+    printf("bwrite: writing block %d to SD card with data: %s\n", b->blockno, (char *)b->data);
 #endif
-    int result = sd_write_ext2(b->dev, b->blockno, (char *)b->data);
+    int result = sd_write_ext2(b->dev, b->blockno, b->data);
     if (result < 0) {
         printf("bwrite: sd write failed for block %d\n", b->blockno);
     }

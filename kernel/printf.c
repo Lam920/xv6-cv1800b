@@ -249,6 +249,7 @@ void panic(char *s)
     printf("panic: ");
     printf(s);
     printf("\n");
+    backtrace();
     panicked = 1; // freeze uart output from other CPUs
     for(;;)
         ;
@@ -258,4 +259,24 @@ void printfinit(void)
 {
     initlock(&pr.lock, "pr");
     pr.locking = 1;
+}
+
+int backtrace(void) {
+  printf("backtrace:\n");
+  /* Get this frame pointer */
+  uint64 start_fp = r_fp();
+  /* Get virtual address of fp */
+  uint64 final_fp = PGROUNDDOWN(start_fp);
+  uint64 tmp_fp = start_fp;
+  uint64 ra_tmp;
+  while (1) {
+    ra_tmp = *((uint64 *)(tmp_fp - 8));
+    tmp_fp = *((uint64 *)(tmp_fp - 16));
+    if (tmp_fp <= final_fp) {
+      break;
+    }
+    printf("%p\n", (uint64 *)(ra_tmp - 4));
+  }
+
+  return 0;
 }

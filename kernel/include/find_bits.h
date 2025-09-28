@@ -4,20 +4,19 @@
 unsigned long find_next_zero_bit(const unsigned long *addr, unsigned long size, unsigned long offset);
 
 #define BITS_PER_LONG 32
-
 #define BITOP_WORD(nr) ((nr) / BITS_PER_LONG)
 
 /**
- * __ffs - find first set bit in word
+ * __ffs - find first set bit in word (1-indexed)
  * @word: The word to search
- *
- * Undefined if @word is 0 — caller should check first.
+ * Returns 0 if no bits set, otherwise position (1-32)
  */
 static inline unsigned long __ffs(unsigned long word)
 {
-    unsigned long ret = 0;
-
-    // Loop until we find the first bit set
+    if (word == 0)
+        return 0;
+    
+    unsigned long ret = 1;
     while ((word & 1UL) == 0) {
         word >>= 1;
         ret++;
@@ -26,14 +25,14 @@ static inline unsigned long __ffs(unsigned long word)
 }
 
 /**
- * ffz - find first zero bit in word
+ * ffz - find first zero bit in word (1-indexed)
  * @word: The word to search
- *
- * Undefined if no zero exists — caller should check against ~0UL first.
+ * Returns 0 if all bits set, otherwise position (1-32)
  */
 static inline unsigned long ffz(unsigned long word)
 {
-    // Just invert and reuse __ffs
+    if (word == ~0UL)
+        return 0;
     return __ffs(~word);
 }
 

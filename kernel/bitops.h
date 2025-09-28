@@ -103,53 +103,33 @@ static inline int test_bit(uint32_t nr, const void *addr) {
 #define BITS_PER_LONG (sizeof(unsigned long) * 8)
 #endif
 
-static inline int test_and_set_bit(long nr, volatile unsigned long *addr)
+static inline int test_and_set_bit(int nr, volatile unsigned long *addr)
 {
-    /* Check if address is properly aligned for atomic operations */
-    if ((unsigned long)addr % sizeof(unsigned long)) {
-        /* Unaligned access - use non-atomic version with compiler barrier */
-        unsigned long mask = 1UL << (nr % BITS_PER_LONG);
-        volatile unsigned long *word = addr + (nr / BITS_PER_LONG);
-        unsigned long old = *word;
-        
-        *word = old | mask;
-        __asm__ __volatile__ ("" : : : "memory"); /* Compiler barrier */
-        
-        return !!(old & mask);
-    }
-    
-    /* Aligned access - use proper atomic operations */
-    unsigned long mask = 1UL << (nr % BITS_PER_LONG);
-    volatile unsigned long *word = addr + (nr / BITS_PER_LONG);
-    
-    /* Use atomic fetch-or with acquire-release semantics */
-    unsigned long old = __atomic_fetch_or(word, mask, __ATOMIC_ACQ_REL);
-    return !!(old & mask);
+    uint32_t mask = 1U << (nr % 32);
+    volatile uint32_t *p = ((volatile uint32_t *)addr) + (nr / 32);
+    uint32_t old;
+
+    __asm__ __volatile__ (
+        "amoor.w %0, %2, (%1)"
+        : "=r"(old)
+        : "r"(p), "r"(mask)
+        : "memory");
+
+    return (old & mask) != 0;
 }
 
-
-static inline int test_and_clear_bit(long nr, volatile unsigned long *addr)
+static inline int test_and_clear_bit(int nr, volatile unsigned long *addr)
 {
-    /* Check if address is properly aligned for atomic operations */
-    if ((unsigned long)addr % sizeof(unsigned long)) {
-        /* Unaligned access - use non-atomic version with compiler barrier */
-        unsigned long mask = 1UL << (nr % BITS_PER_LONG);
-        volatile unsigned long *word = addr + (nr / BITS_PER_LONG);
-        unsigned long old = *word;
-        
-        *word = old & ~mask;
-        __asm__ __volatile__ ("" : : : "memory"); /* Compiler barrier */
-        
-        return !!(old & mask);
-    }
-    
-    /* Aligned access - use proper atomic operations */
-    unsigned long mask = 1UL << (nr % BITS_PER_LONG);
-    volatile unsigned long *word = addr + (nr / BITS_PER_LONG);
-    
-    /* Use atomic fetch-and with acquire-release semantics */
-    unsigned long old = __atomic_fetch_and(word, ~mask, __ATOMIC_ACQ_REL);
-    return !!(old & mask);
-}
+    uint32_t mask = 1U << (nr % 32);
+    volatile uint32_t *p = ((volatile uint32_t *)addr) + (nr / 32);
+    uint32_t old;
 
+    __asm__ __volatile__ (
+        "amoand.w %0, %2, (%1)"
+        : "=r"(old)
+        : "r"(p), "r"(~mask)
+        : "memory");
+
+    return (old & mask) != 0;
+}
 #endif

@@ -2,7 +2,17 @@
 #define INC_RISCV_H
 #ifndef __ASSEMBLER__
 
+// #define DEBUG_EXT2  1
+
 #include "types.h"
+
+static inline uint64
+r_fp()
+{
+  uint64 x;
+  asm volatile("mv %0, s0" : "=r" (x) );
+  return x;
+}
 
 // which hart (core) is this?
 static inline uint64

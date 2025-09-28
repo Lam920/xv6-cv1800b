@@ -297,6 +297,7 @@ generic_readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
       break;
     bp = ip->fs_t->ops->bread(ip->dev, addr);
     m = min(n - tot, sb[ip->dev].blocksize - off % sb[ip->dev].blocksize);
+    // printf("generic_readi read buffer: %s\n", (char *)bp->data);
     if(either_copyout(user_dst, dst, bp->data + (off % sb[ip->dev].blocksize), m) == -1) {
       ip->fs_t->ops->brelse(bp);
       tot = -1;
@@ -390,7 +391,7 @@ iget(uint dev, uint inum, int (*fill_inode)(struct inode *))
   struct inode *ip, *empty;
   struct filesystem_type *fs_t;
   
-#ifdef DEBUG
+#ifdef DEBUG_EXT2
   printf("iget: dev %d inum %d\n", dev, inum);
 #endif
 
@@ -403,12 +404,12 @@ iget(uint dev, uint inum, int (*fill_inode)(struct inode *))
     printf("iget: checking inode slot (dev %d inum %d ref %d)\n", ip->dev, ip->inum, ip->ref);
 #endif
     if(ip->ref > 0 && ip->dev == dev && ip->inum == inum){
-#ifdef DEBUG
+#ifdef DEBUG_EXT2
       printf("Found   cached inode\n");
 #endif
       // If the current inode is an mount point
       if (ip->type == T_MOUNT) {
-#ifdef DEBUG
+#ifdef DEBUG_EXT2
         printf("iget: inode is a mount point, getting root inode of mounted FS\n");
 #endif
         // Get the root inode of the mounted filesystem
@@ -426,14 +427,14 @@ iget(uint dev, uint inum, int (*fill_inode)(struct inode *))
 
       ip->ref++;
       release(&itable.lock);
-#ifdef DEBUG
+#ifdef DEBUG_EXT2
       printf("iget: returning cached inode\n");
 #endif
       return ip;
     }
     if(empty == 0 && ip->ref == 0)    // Remember empty slot.
     {
-#ifdef DEBUG
+#ifdef DEBUG_EXT2
       printf("iget: found empty inode slot\n");
 #endif
       empty = ip;
