@@ -78,7 +78,8 @@ main()
 #ifdef SPI_DRIVER
     spiinit();
 #endif
-    dw_eth_init();
+    phy_init();
+    eth_init();
     printf("Do userinit\n");
     userinit();      // first user process
     printf("Done userinit\n");

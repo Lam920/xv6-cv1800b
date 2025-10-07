@@ -38,6 +38,8 @@ enum eth_state_t {
 	ETH_STATE_ACTIVE
 };
 
+#define DEFAULT_MAC_ADDR	"24:0b:2a:21:09:20"
+
 #ifdef CONFIG_DM_ETH
 /**
  * struct eth_pdata - Platform data for Ethernet MAC controllers
@@ -98,15 +100,15 @@ struct udevice {
 };
 
 struct eth_ops {
-	int (*start)(struct udevice *dev);
-	int (*send)(struct udevice *dev, void *packet, int length);
-	int (*recv)(struct udevice *dev, int flags, uchar **packetp);
-	int (*free_pkt)(struct udevice *dev, uchar *packet, int length);
-	void (*stop)(struct udevice *dev);
-	int (*mcast)(struct udevice *dev, const u8 *enetaddr, int join);
-	int (*write_hwaddr)(struct udevice *dev);
-	int (*read_rom_hwaddr)(struct udevice *dev);
-	int (*set_promisc)(struct udevice *dev, bool enable);
+	int (*start)(void);
+	int (*send)(void *packet, int length);
+	int (*recv)(int flags, uchar **packetp);
+	int (*free_pkt)(uchar *packet, int length);
+	void (*stop)(void);
+	int (*mcast)(const u8 *enetaddr, int join);
+	int (*write_hwaddr)(uint8_t *enetaddr);
+	int (*read_rom_hwaddr)(void);
+	int (*set_promisc)(bool enable);
 };
 
 #define eth_get_ops(dev) ((struct eth_ops *)(dev)->driver->ops)
@@ -120,7 +122,7 @@ struct udevice *eth_get_dev_by_name(const char *devname);
 unsigned char *eth_get_ethaddr(void); /* get the current device MAC */
 
 /* Used only when NetConsole is enabled */
-int eth_is_active(struct udevice *dev); /* Test device for active state */
+int eth_is_active(); /* Test device for active state */
 int eth_init_state_only(void); /* Set active state */
 void eth_halt_state_only(void); /* Set passive state */
 #endif

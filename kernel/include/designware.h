@@ -19,8 +19,33 @@
 
 #define DW_DMA_BASE_OFFSET	(0x1000)
 
+/* Default DMA Burst length */
+#ifndef CONFIG_DW_GMAC_DEFAULT_DMA_PBL
+#define CONFIG_DW_GMAC_DEFAULT_DMA_PBL 8
+#endif
 
+/* Bus mode register definitions */
+#define FIXEDBURST		(1 << 16)
+#define PRIORXTX_41		(3 << 14)
+#define PRIORXTX_31		(2 << 14)
+#define PRIORXTX_21		(1 << 14)
+#define PRIORXTX_11		(0 << 14)
+#define DMA_PBL			(CONFIG_DW_GMAC_DEFAULT_DMA_PBL<<8)
+#define RXHIGHPRIO		(1 << 1)
+#define DMAMAC_SRST		(1 << 0)
 
+/* Poll demand definitions */
+#define POLL_DATA		(0xFFFFFFFF)
+
+/* Operation mode definitions */
+#define STOREFORWARD		(1 << 21)
+#define FLUSHTXFIFO		(1 << 20)
+#define TXSTART			(1 << 13)
+#define TXSECONDFRAME		(1 << 2)
+#define RXSTART			(1 << 1)
+
+/* Descriptior related definitions */
+#define MAC_MAX_FRAME_SZ	(1600)
 
 /* MAC configuration register definitions */
 #define FRAMEBURSTENABLE	(1 << 21)
@@ -45,6 +70,59 @@
 #define MIIREGSHIFT		(6)
 #define MII_REGMSK		(0x1F << 6)
 #define MII_ADDRMSK		(0x1F << 11)
+
+
+/* tx control bits definitions */
+
+#define DESC_TXCTRL_TXINT		(1 << 31)
+#define DESC_TXCTRL_TXLAST		(1 << 30)
+#define DESC_TXCTRL_TXFIRST		(1 << 29)
+#define DESC_TXCTRL_TXCHECKINSCTRL	(3 << 27)
+#define DESC_TXCTRL_TXCRCDIS		(1 << 26)
+#define DESC_TXCTRL_TXRINGEND		(1 << 25)
+#define DESC_TXCTRL_TXCHAIN		(1 << 24)
+
+#define DESC_TXCTRL_SIZE1MASK		(0x7FF << 0)
+#define DESC_TXCTRL_SIZE1SHFT		(0)
+#define DESC_TXCTRL_SIZE2MASK		(0x7FF << 11)
+#define DESC_TXCTRL_SIZE2SHFT		(11)
+
+
+/* rx control bits definitions */
+#define DESC_RXCTRL_RXINTDIS		(1 << 31)
+#define DESC_RXCTRL_RXRINGEND		(1 << 25)
+#define DESC_RXCTRL_RXCHAIN		(1 << 24)
+
+#define DESC_RXCTRL_SIZE1MASK		(0x7FF << 0)
+#define DESC_RXCTRL_SIZE1SHFT		(0)
+#define DESC_RXCTRL_SIZE2MASK		(0x7FF << 11)
+#define DESC_RXCTRL_SIZE2SHFT		(11)
+
+/* tx status bits definitions */
+#define DESC_TXSTS_OWNBYDMA		(1 << 31)
+#define DESC_TXSTS_MSK			(0x1FFFF << 0)
+
+/* rx status bits definitions */
+#define DESC_RXSTS_OWNBYDMA		(1 << 31)
+#define DESC_RXSTS_DAFILTERFAIL		(1 << 30)
+#define DESC_RXSTS_FRMLENMSK		(0x3FFF << 16)
+#define DESC_RXSTS_FRMLENSHFT		(16)
+
+#define DESC_RXSTS_ERROR		(1 << 15)
+#define DESC_RXSTS_RXTRUNCATED		(1 << 14)
+#define DESC_RXSTS_SAFILTERFAIL		(1 << 13)
+#define DESC_RXSTS_RXIPC_GIANTFRAME	(1 << 12)
+#define DESC_RXSTS_RXDAMAGED		(1 << 11)
+#define DESC_RXSTS_RXVLANTAG		(1 << 10)
+#define DESC_RXSTS_RXFIRST		(1 << 9)
+#define DESC_RXSTS_RXLAST		(1 << 8)
+#define DESC_RXSTS_RXIPC_GIANT		(1 << 7)
+#define DESC_RXSTS_RXCOLLISION		(1 << 6)
+#define DESC_RXSTS_RXFRAMEETHER		(1 << 5)
+#define DESC_RXSTS_RXWATCHDOG		(1 << 4)
+#define DESC_RXSTS_RXMIIERROR		(1 << 3)
+#define DESC_RXSTS_RXDRIBBLING		(1 << 2)
+#define DESC_RXSTS_RXCRC		(1 << 1)
 
 
 struct eth_dma_regs {
@@ -131,6 +209,8 @@ int designware_eth_free_pkt(uchar *packet, int length);
 
 void designware_eth_stop();
 
-int designware_eth_write_hwaddr();
+int designware_eth_write_hwaddr(uint8_t *enetaddr);
+
+extern struct eth_ops designware_eth_ops;
 
 #endif // DESIGNWARE_H

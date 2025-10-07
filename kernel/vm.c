@@ -9,6 +9,7 @@
 #include "config.h"
 
 #include "emmc.h"
+#include "include/designware.h"
 
 /*
  * the kernel's page table.
@@ -91,6 +92,8 @@ kvmmake(void)
 #endif
   printf("Map for ETH0_BASE\n");
   kvmmap(kpgtbl, ETH0_BASE, ETH0_BASE, PGSIZE, PTE_DEVICE);
+  printf("Map for ETH0_DMA\n");
+  kvmmap(kpgtbl, ETH0_BASE + DW_DMA_BASE_OFFSET, ETH0_BASE + DW_DMA_BASE_OFFSET, PGSIZE, PTE_DEVICE);
 
   // PLIC
   printf("Do kvm map for PLIC\n");

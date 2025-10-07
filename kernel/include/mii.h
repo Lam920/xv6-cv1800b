@@ -153,6 +153,28 @@
 #define MII_MMD_CTRL_INCR_RDWT	0x8000	/* post increment on reads & writes */
 #define MII_MMD_CTRL_INCR_ON_WT	0xC000	/* post increment on writes only */
 
+
+/* MII_LPA */
+#define PHY_ANLPAR_PSB_802_3	0x0001
+#define PHY_ANLPAR_PSB_802_9	0x0002
+
+/* MII_CTRL1000 masks */
+#define PHY_1000BTCR_1000FD	0x0200
+#define PHY_1000BTCR_1000HD	0x0100
+
+/* MII_STAT1000 masks */
+#define PHY_1000BTSR_MSCF	0x8000
+#define PHY_1000BTSR_MSCR	0x4000
+#define PHY_1000BTSR_LRS	0x2000
+#define PHY_1000BTSR_RRS	0x1000
+#define PHY_1000BTSR_1000FD	0x0800
+#define PHY_1000BTSR_1000HD	0x0400
+
+/* phy EXSR */
+#define ESTATUS_1000XF		0x8000
+#define ESTATUS_1000XH		0x4000
+
+
 /**
  * mii_nway_result
  * @negotiated: value of MII ANAR and'd with ANLPAR

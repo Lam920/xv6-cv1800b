@@ -12,6 +12,9 @@
 #define __LINUX_MDIO_H__
 
 #include "../types.h"
+#include "mii.h"
+
+#define PHY_FLAG_BROKEN_RESET	(1 << 0) /* soft reset not supported */
 
 /* MDIO Manageable Devices (MMDs). */
 #define MDIO_MMD_PMAPMD		1	/* Physical Medium Attachment*/
