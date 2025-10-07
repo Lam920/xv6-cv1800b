@@ -89,6 +89,8 @@ kvmmake(void)
 #ifdef SPI0
   kvmmap(kpgtbl, SPI0, SPI0, PGSIZE, PTE_DEVICE);
 #endif
+  printf("Map for ETH0_BASE\n");
+  kvmmap(kpgtbl, ETH0_BASE, ETH0_BASE, PGSIZE, PTE_DEVICE);
 
   // PLIC
   printf("Do kvm map for PLIC\n");

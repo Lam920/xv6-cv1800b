@@ -252,4 +252,8 @@ int             initext2fs(void);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 
+
+// designware.c
+void            dw_eth_init(void);
+
 #endif

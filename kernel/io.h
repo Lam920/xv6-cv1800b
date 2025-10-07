@@ -67,4 +67,17 @@ static inline void clrsetbits32(uintptr_t addr, uint32_t clear, uint32_t set)
     write32(addr, (read32(addr) & ~clear) | set);
 }
 
+
+
+#define readb(addr) \
+	({ unsigned char __v = (*(volatile unsigned char *)(addr)); __v; })
+#define readw(addr) \
+	({ unsigned short __v = (*(volatile unsigned short *)(addr)); __v; })
+#define readl(addr) \
+	({ unsigned int __v = (*(volatile unsigned int *)(addr)); __v; })
+#define writeb(b, addr) (void)((*(volatile unsigned char *)(addr)) = (b))
+#define writew(b, addr) (void)((*(volatile unsigned short *)(addr)) = (b))
+#define writel(b, addr) (void)((*(volatile unsigned int *)(addr)) = (b))
+
+
 #endif

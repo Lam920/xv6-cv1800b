@@ -41,7 +41,8 @@ OBJS = \
   $K/vfs.o \
   $K/vfsmount.o \
   $K/s5.o \
-  $K/ext2.o
+  $K/ext2.o \
+  $K/designware.o
 
 
 $K/ramdisk_data.o: fs.img

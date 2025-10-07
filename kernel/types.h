@@ -1,6 +1,8 @@
 #ifndef INC_TYPES_H
 #define INC_TYPES_H
 
+#include "errno.h"
+
 typedef unsigned int    uint;
 typedef unsigned short  ushort;
 typedef unsigned char   uchar;
@@ -25,7 +27,7 @@ typedef long        ssize_t;
 typedef uint64_t    pde_t;
 typedef int         boot;
 
-typedef uint64_t    dma_addr_t;
+// typedef uint64_t    dma_addr_t;
 
 typedef uint32_t    __be32;
 
@@ -72,5 +74,118 @@ typedef int         bool;
 # define be16_to_cpu(x)		uswap_16(x)
 # define be32_to_cpu(x)		uswap_32(x)
 # define be64_to_cpu(x)		uswap_64(x)
+
+
+#ifndef CONFIG_DM_ETH
+#define CONFIG_DM_ETH   1
+#endif
+
+typedef signed char s8;
+typedef unsigned char u8;
+
+typedef signed short s16;
+typedef unsigned short u16;
+
+typedef signed int s32;
+typedef unsigned int u32;
+
+typedef signed long long s64;
+typedef unsigned long long u64;
+
+#define BITS_PER_LONG 32
+
+/* Dma addresses are 32-bits wide.  */
+
+typedef unsigned long phys_addr_t;
+typedef unsigned long phys_size_t;
+
+typedef unsigned long ulong;
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+#ifndef EOK
+#define EOK             0      /* no error */
+#endif //EOK
+
+#ifndef EPERM
+#define EPERM           1      /* Operation not permitted */
+#endif //EPERM
+
+#ifndef ENOENT
+#define ENOENT          2      /* No such file or directory */
+#endif //ENOENT
+
+#ifndef EIO
+#define EIO             5      /* I/O error */
+#endif //EIO
+
+#ifndef ENOEXEC
+#define ENOEXEC         8      /* Exec format error */
+#endif //ENOEXEC
+
+#ifndef EAGAIN
+#define EAGAIN          11      /* Try again */
+#endif //EAGAIN
+
+#ifndef ENOMEM
+#define ENOMEM          12      /* Out of memory */
+#endif //ENOMEM
+
+#ifndef EFAULT
+#define EFAULT          14      /* Bad address */
+#endif //EFAULT
+
+#ifndef EBUSY
+#define EBUSY           16      /* Device or resource busy */
+#endif //EBUSY
+
+#ifndef EINVAL
+#define EINVAL          22      /* Invalid argument */
+#endif //EINVAL
+
+#ifndef ENOSPC
+#define ENOSPC          28      /* No space left on device */
+#endif //ENOSPC
+
+#ifndef EBADSLT
+#define EBADSLT         57      /* Invalid slot */
+#endif //EBADSLT
+
+#ifndef EPROTO
+#define EPROTO          71      /* Protocol error */
+#endif //EPROTO
+
+#ifndef EOVERFLOW
+#define EOVERFLOW       75      /* Value too large for defined data type */
+#endif //EOVERFLOW
+
+#ifndef EOPNOTSUPP
+#define EOPNOTSUPP      95      /* Operation not supported */
+#endif //EOPNOTSUPP
+
+#ifndef ESHUTDOWN
+#define ESHUTDOWN       108     /* Cannot send after transport endpoint shutdown */
+#endif
+
+#ifndef ETIMEDOUT
+#define ETIMEDOUT       110     /* Connection timed out */
+#endif //ETIMEDOUT
+
+#ifndef EINPROGRESS
+#define EINPROGRESS     115     /* Operation now in progress */
+#endif //EINPROGRESS
+
+#ifndef EDQUOT
+#define EDQUOT          122     /* Quota exceeded */
+#endif //EDQUOT
+
+#ifndef ENOTSUP
+#define ENOTSUP         EOPNOTSUPP
+#endif //ENOTSUP
+
+#ifndef ECANCELED
+#define ECANCELED       126      /* Cancelled */
+#endif //ECANCELED
+
 
 #endif
