@@ -665,6 +665,9 @@ static void rx_descs_init();
 static int _dw_write_hwaddr(uint8_t *mac_id);
 int phy_startup(struct phy_device *phydev);
 
+void print_tx_state(int state) ;
+void print_rx_state(int state) ;
+
 
 struct eth_ops designware_eth_ops = {
 	.start			= designware_eth_start,
@@ -934,6 +937,79 @@ static int dw_adjust_link(struct dw_eth_dev *priv, struct eth_mac_regs *mac_p,
 	return 0;
 }
 
+void dump_dma_status(struct eth_dma_regs *dma_p) {
+    printf("\n=== DMA Setup Verification ===\n");
+    
+    // 1. Bus Mode
+    uint32_t busmode = readl(&dma_p->busmode);
+    printf("DMA_BUSMODE (0x%08x):\n", busmode);
+    printf("  SWR (reset): %d (should be 0)\n", busmode & DMAMAC_SRST ? 1 : 0);
+    printf("  DSL: %d\n", (busmode >> 2) & 0x1F);
+    printf("  PBL: %d\n", (busmode >> 8) & 0x3F);
+    printf("  FIXEDBURST: %d\n", (busmode & FIXEDBURST) ? 1 : 0);
+    printf("  PRIORXTX: %d\n", (busmode >> 14) & 0x3);
+    
+    // 2. Operation Mode
+    uint32_t opmode = readl(&dma_p->opmode);
+    printf("\nDMA_OPMODE (0x%08x):\n", opmode);
+    printf("  SR (RX Start): %d\n", (opmode & RXSTART) ? 1 : 0);
+    printf("  ST (TX Start): %d\n", (opmode & TXSTART) ? 1 : 0);
+    printf("  FTF (Flush TX): %d (should be 0 after flush completes)\n", 
+           (opmode & FLUSHTXFIFO) ? 1 : 0);
+    
+    // 3. DMA Status Register - THIS IS KEY!
+    uint32_t status = readl(&dma_p->status);
+    printf("\nDMA_STATUS (0x%08x):\n", status);
+    printf("  TI (TX interrupt): %d\n", (status & 0x1) ? 1 : 0);
+    printf("  TPS (TX stopped): %d\n", (status & 0x2) ? 1 : 0);
+    printf("  TU (TX unavail): %d\n", (status & 0x4) ? 1 : 0);
+    printf("  RI (RX interrupt): %d\n", (status & 0x40) ? 1 : 0);
+    printf("  RU (RX unavail): %d\n", (status & 0x80) ? 1 : 0);
+    printf("  RPS (RX stopped): %d\n", (status & 0x100) ? 1 : 0);
+    printf("  TX Process State: %d ", (status >> 20) & 0x7);
+    print_tx_state((status >> 20) & 0x7);
+    printf("  RX Process State: %d ", (status >> 17) & 0x7);
+    print_rx_state((status >> 17) & 0x7);
+    
+    // 4. Descriptor List Addresses
+    printf("\nDescriptor Addresses:\n");
+    printf("  TX Desc List: 0x%08x\n", readl(&dma_p->txdesclistaddr));
+    printf("  RX Desc List: 0x%08x\n", readl(&dma_p->rxdesclistaddr));
+    
+    // 5. Current Descriptor/Buffer Addresses
+    printf("\nCurrent Pointers:\n");
+    printf("  Current TX Desc: 0x%08x\n", readl(&dma_p->currhosttxdesc));
+    printf("  Current RX Desc: 0x%08x\n", readl(&dma_p->currhostrxdesc));
+    printf("  Current TX Buf:  0x%08x\n", readl(&dma_p->currhosttxbuffaddr));
+    printf("  Current RX Buf:  0x%08x\n", readl(&dma_p->currhostrxbuffaddr));
+    
+    // 6. Interrupt Enable
+    printf("\nDMA_INTENABLE: 0x%08x\n", readl(&dma_p->intenable));
+}
+
+void print_tx_state(int state) {
+    switch(state) {
+        case 0: printf("(Stopped)\n"); break;
+        case 1: printf("(Fetching descriptor)\n"); break;
+        case 2: printf("(Waiting for status)\n"); break;
+        case 3: printf("(Reading from memory)\n"); break;
+        case 6: printf("(Suspended)\n"); break;
+        case 7: printf("(Closing descriptor)\n"); break;
+        default: printf("(Unknown)\n");
+    }
+}
+
+void print_rx_state(int state) {
+    switch(state) {
+        case 0: printf("(Stopped)\n"); break;
+        case 1: printf("(Fetching descriptor)\n"); break;
+        case 3: printf("(Waiting for packet)\n"); break;
+        case 4: printf("(Suspended)\n"); break;
+        case 5: printf("(Closing descriptor)\n"); break;
+        case 7: printf("(Writing to memory)\n"); break;
+        default: printf("(Unknown)\n");
+    }
+}
 
 
 int designware_eth_init(u8 *enetaddr)
@@ -1003,6 +1079,8 @@ int designware_eth_init(u8 *enetaddr)
 	ret = dw_adjust_link(&priv, mac_p, priv.phydev);
 	if (ret)
 		return ret;
+
+	dump_dma_status(dma_p);
 
 	return 0;
 }
