@@ -197,7 +197,13 @@ devintr()
     //  virtio_disk_intr();
     } else if (irq == SD0_IRQ) {
       //sd_intr();
-    } else if(irq){
+    } 
+    else if (irq == ETH0_IRQ) {
+      // dw ethernet interrupt
+      //printf("[plic] got eth irq=%d\n", irq);
+      eth_intr();
+    }
+    else if(irq){
       printf("unexpected interrupt irq=%d\n", irq);
     }
 

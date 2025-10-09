@@ -1082,6 +1082,21 @@ int designware_eth_init(u8 *enetaddr)
 
 	dump_dma_status(dma_p);
 
+	/* Enable DMA interrupts */
+	uint32_t dma_ie = DMA_INTR_ENA_NIE |  // Enable normal interrupt summary
+                      DMA_INTR_ENA_AIE |  // Enable abnormal interrupt summary
+                      DMA_INTR_ENA_RIE |  // Enable RX interrupt
+                      DMA_INTR_ENA_TIE;   // Enable TX interrupt
+    
+    // Write to DMA interrupt enable register (offset 0x1c)
+    writel(dma_ie, &dma_p->intenable);
+    
+    // Mask all MAC interrupts (we don't need them)
+    writel(0xFFFFFFFF, &mac_p->intmask);
+
+	printf("ETH: DMA interrupts enabled: 0x%08x\n", dma_ie);
+    printf("ETH: DMA intenable readback: 0x%08x\n", readl(&dma_p->intenable));
+
 	return 0;
 }
 
@@ -1207,4 +1222,51 @@ int designware_eth_free_pkt(uchar *packet, int length) {
 
 void designware_eth_stop() {
 	return ;
+}
+
+
+void eth_intr(void)
+{
+	struct eth_dma_regs *dma_p = priv.dma_regs_p;
+    uint32_t dma_status = readl(&dma_p->status);
+    
+    printf("ETH_INTR: DMA status=0x%08x\n", dma_status);
+    
+    // Check what triggered the interrupt
+    if (dma_status & (1 << 0)) {  // TI - Transmit Interrupt
+        printf("  TX complete\n");
+        // Handle TX completion
+        // TODO: Free TX buffers, update TX descriptor ring
+    }
+    
+    if (dma_status & (1 << 6)) {  // RI - Receive Interrupt
+        printf("  RX packet received\n");
+        // Handle RX packet
+        // TODO: Process RX descriptors, read packet data
+        eth_rx_packets();
+    }
+    
+    if (dma_status & (1 << 2)) {  // TU - Transmit Buffer Unavailable
+        printf("  TX buffer unavailable\n");
+    }
+    
+    if (dma_status & (1 << 7)) {  // RU - Receive Buffer Unavailable
+        printf("  RX buffer unavailable\n");
+        // Resume RX if needed
+        writel(1, &dma_p->rxpolldemand);
+    }
+    
+    if (dma_status & (1 << 15)) {  // AIS - Abnormal Interrupt Summary
+        printf("  Abnormal interrupt! Status=0x%08x\n", dma_status);
+        
+        if (dma_status & (1 << 13))  // FBI - Fatal Bus Error
+            printf("    Fatal bus error!\n");
+        if (dma_status & (1 << 8))   // RPS - RX Process Stopped
+            printf("    RX process stopped\n");
+        if (dma_status & (1 << 1))   // TPS - TX Process Stopped
+            printf("    TX process stopped\n");
+    }
+    
+    // Clear interrupts by writing back the status bits
+    writel(dma_status & 0x1FFFF, &dma_p->status);
 }

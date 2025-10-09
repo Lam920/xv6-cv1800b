@@ -125,6 +125,14 @@
 #define DESC_RXSTS_RXCRC		(1 << 1)
 
 
+/* DMA interrupt bit */
+// DMA Interrupt Enable Register bits
+#define DMA_INTR_ENA_NIE    (1 << 16)  // Normal Interrupt Summary Enable
+#define DMA_INTR_ENA_AIE    (1 << 15)  // Abnormal Interrupt Summary Enable
+#define DMA_INTR_ENA_RIE    (1 << 6)   // Receive Interrupt Enable
+#define DMA_INTR_ENA_TIE    (1 << 0)   // Transmit Interrupt Enable
+
+
 struct eth_dma_regs {
 	uint32_t busmode;		/* 0x00 */
 	uint32_t txpolldemand;	/* 0x04 */

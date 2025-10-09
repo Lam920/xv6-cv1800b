@@ -256,5 +256,6 @@ int             initext2fs(void);
 // designware.c
 void            phy_init(void);
 void            eth_init(void);
+void            eth_intr(void);
 
 #endif

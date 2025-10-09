@@ -59,4 +59,7 @@
 #define US_INTERVAL  25UL
 
 
+#define ETH0_IRQ  31
+
+
 #endif

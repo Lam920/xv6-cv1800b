@@ -16,6 +16,7 @@ plicinit(void)
   // set desired IRQ priorities non-zero (otherwise disabled).
   *(uint32_t *)(PLIC + UART0_IRQ*4) = 1;
   *(uint32_t *)(PLIC + SD0_IRQ*4) = 1;
+  *(uint32_t *)(PLIC + ETH0_IRQ*4) = 1;
 }
 
 void
@@ -27,6 +28,7 @@ plicinithart(void)
   // for the uart.
   //*(uint32_t *)(PLIC_SENABLE(hart) + (UART0_IRQ / 32) * 4) = (1 << (UART0_IRQ % 32));
   *(uint32_t *)PLIC_SENABLE1(hart) = (1 << (UART0_IRQ - 32)) | (1 << (SD0_IRQ - 32));
+  *(uint32_t *)PLIC_SENABLE0(hart) = (1 << (ETH0_IRQ % 32));
   // set this hart's S-mode priority threshold to 0.
   *(uint32_t *)PLIC_SPRIORITY(hart) = 0;
 }
