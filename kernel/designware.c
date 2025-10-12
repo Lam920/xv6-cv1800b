@@ -678,15 +678,66 @@ struct eth_ops designware_eth_ops = {
 	.write_hwaddr		= designware_eth_write_hwaddr,
 };
 
+// Convert hex character to integer
+static int hex_to_int(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static int parse_mac_address(const char *str, uint8_t *mac)
+{
+    int i, hi, lo;
+    
+    for (i = 0; i < 6; i++) {
+        // Parse two hex digits
+        hi = hex_to_int(str[i * 3]);
+        if (hi < 0) {
+            printf("Invalid MAC address at position %d\n", i * 3);
+            return -1;
+        }
+        
+        lo = hex_to_int(str[i * 3 + 1]);
+        if (lo < 0) {
+            printf("Invalid MAC address at position %d\n", i * 3 + 1);
+            return -1;
+        }
+        
+        mac[i] = (hi << 4) | lo;
+        
+        // Check for colon separator (except after last byte)
+        if (i < 5 && str[i * 3 + 2] != ':') {
+            printf("Missing colon at position %d\n", i * 3 + 2);
+            return -1;
+        }
+    }
+    
+    return 0;
+}
 
 static int _dw_write_hwaddr(u8 *mac_id)
 {
 	struct eth_mac_regs *mac_p = priv.mac_regs_p;
 	u32 macid_lo, macid_hi;
 
-	macid_lo = mac_id[0] + (mac_id[1] << 8) + (mac_id[2] << 16) +
-		   (mac_id[3] << 24);
-	macid_hi = mac_id[4] + (mac_id[5] << 8);
+	u8 enetaddr[6];
+
+	printf("Parsing MAC address: %s\n", mac_id);
+
+	if (parse_mac_address((char *)mac_id, enetaddr) != 0) {
+		printf("Invalid MAC address: %s\n", mac_id);
+		return -1;
+	}
+
+	printf("Parsed MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+           enetaddr[0], enetaddr[1], enetaddr[2],
+           enetaddr[3], enetaddr[4], enetaddr[5]);
+
+	macid_lo = enetaddr[0] + (enetaddr[1] << 8) + (enetaddr[2] << 16) +
+		   (enetaddr[3] << 24);
+	macid_hi = enetaddr[4] + (enetaddr[5] << 8);
 
 	writel(macid_hi, &mac_p->macaddr0hi);
 	writel(macid_lo, &mac_p->macaddr0lo);
@@ -1204,26 +1255,173 @@ int designware_eth_start(void)
 	return 0;
 }
 
+static int _dw_eth_send(struct dw_eth_dev *priv, void *packet, int length)
+{
+	struct eth_dma_regs *dma_p = priv->dma_regs_p;
+	u32 desc_num = priv->tx_currdescnum;
+	struct dmamacdescr *desc_p = &priv->tx_mac_descrtable[desc_num];
+	ulong desc_start = (ulong)desc_p;
+	ulong desc_end = desc_start +
+		roundup(sizeof(*desc_p), ARCH_DMA_MINALIGN);
+	ulong data_start = desc_p->dmamac_addr;
+	ulong data_end = data_start + roundup(length, ARCH_DMA_MINALIGN);
+	/*
+	 * Strictly we only need to invalidate the "txrx_status" field
+	 * for the following check, but on some platforms we cannot
+	 * invalidate only 4 bytes, so we flush the entire descriptor,
+	 * which is 16 bytes in total. This is safe because the
+	 * individual descriptors in the array are each aligned to
+	 * ARCH_DMA_MINALIGN and padded appropriately.
+	 */
+	invalidate_dcache_range(desc_start, desc_end);
+
+	/* Check if the descriptor is owned by CPU */
+	if (desc_p->txrx_status & DESC_TXSTS_OWNBYDMA) {
+		printf("CPU not owner of tx frame\n");
+		return -EPERM;
+	}
+
+	memcpy((void *)data_start, packet, length);
+	if (length < ETH_ZLEN) {
+		memset(&((char *)data_start)[length], 0, ETH_ZLEN - length);
+		length = ETH_ZLEN;
+	}
+
+	/* Flush data to be sent */
+	flush_dcache_range(data_start, data_end);
+
+	desc_p->dmamac_cntl = (desc_p->dmamac_cntl & ~DESC_TXCTRL_SIZE1MASK) |
+			      ((length << DESC_TXCTRL_SIZE1SHFT) &
+			      DESC_TXCTRL_SIZE1MASK) | DESC_TXCTRL_TXLAST |
+			      DESC_TXCTRL_TXFIRST | DESC_TXCTRL_TXINT;
+
+	desc_p->txrx_status = DESC_TXSTS_OWNBYDMA;
+
+	/* Flush modified buffer descriptor */
+	flush_dcache_range(desc_start, desc_end);
+
+	/* Test the wrap-around condition. */
+	if (++desc_num >= CONFIG_TX_DESCR_NUM)
+		desc_num = 0;
+
+	priv->tx_currdescnum = desc_num;
+
+	/* Start the transmission */
+	writel(POLL_DATA, &dma_p->txpolldemand);
+
+	return 0;
+}
+
+static int _dw_eth_recv(struct dw_eth_dev *priv, uchar **packetp)
+{
+	u32 status, desc_num = priv->rx_currdescnum;
+	struct dmamacdescr *desc_p = &priv->rx_mac_descrtable[desc_num];
+	int length = -EAGAIN;
+	ulong desc_start = (ulong)desc_p;
+	ulong desc_end = desc_start +
+		roundup(sizeof(*desc_p), ARCH_DMA_MINALIGN);
+	ulong data_start = desc_p->dmamac_addr;
+	ulong data_end;
+
+	/* Invalidate entire buffer descriptor */
+	invalidate_dcache_range(desc_start, desc_end);
+
+	status = desc_p->txrx_status;
+
+	/* Check  if the owner is the CPU */
+	if (!(status & DESC_RXSTS_OWNBYDMA)) {
+
+		length = (status & DESC_RXSTS_FRMLENMSK) >>
+			 DESC_RXSTS_FRMLENSHFT;
+
+		/* Invalidate received data */
+		data_end = data_start + roundup(length, ARCH_DMA_MINALIGN);
+		invalidate_dcache_range(data_start, data_end);
+		*packetp = (uchar *)(ulong)desc_p->dmamac_addr;
+	}
+
+	return length;
+}
+
+static int _dw_free_pkt(struct dw_eth_dev *priv)
+{
+	u32 desc_num = priv->rx_currdescnum;
+	struct dmamacdescr *desc_p = &priv->rx_mac_descrtable[desc_num];
+	ulong desc_start = (ulong)desc_p;
+	ulong desc_end = desc_start +
+		roundup(sizeof(*desc_p), ARCH_DMA_MINALIGN);
+
+	/*
+	 * Make the current descriptor valid again and go to
+	 * the next one
+	 */
+	desc_p->txrx_status |= DESC_RXSTS_OWNBYDMA;
+
+	/* Flush only status field - others weren't changed */
+	flush_dcache_range(desc_start, desc_end);
+
+	/* Test the wrap-around condition. */
+	if (++desc_num >= CONFIG_RX_DESCR_NUM)
+		desc_num = 0;
+	priv->rx_currdescnum = desc_num;
+
+	return 0;
+}
+
 void eth_init(void)
 {
 	designware_eth_ops.start();
+	// enable_promiscuous_mode();
+	initlock(&priv.eth_lock, "eth_lock");
+	check_mac_address();
+	test_send_arp();
 }
 
 int designware_eth_send(void *packet, int length) {
-	return 0;
+	return _dw_eth_send(&priv, packet, length);
 }
 int designware_eth_recv(int flags, uchar **packetp) {
-	return 0;
+	return _dw_eth_recv(&priv, packetp);
 }
 
 int designware_eth_free_pkt(uchar *packet, int length) {
-	return 0;
+	return _dw_free_pkt(&priv);
 }
 
 void designware_eth_stop() {
 	return ;
 }
 
+
+void check_mac_address(void)
+{
+    uint32_t mac_hi = readl(&priv.mac_regs_p->macaddr0hi);
+    uint32_t mac_lo = readl(&priv.mac_regs_p->macaddr0lo);
+    
+    printf("\n=== MAC Address Check ===\n");
+    printf("MAC_ADDR0_HI: 0x%08x\n", mac_hi);
+    printf("MAC_ADDR0_LO: 0x%08x\n", mac_lo);
+    
+    // Extract MAC address (note: byte order!)
+    uint8_t mac[6];
+    mac[0] = (mac_lo >> 0) & 0xff;
+    mac[1] = (mac_lo >> 8) & 0xff;
+    mac[2] = (mac_lo >> 16) & 0xff;
+    mac[3] = (mac_lo >> 24) & 0xff;
+    mac[4] = (mac_hi >> 0) & 0xff;
+    mac[5] = (mac_hi >> 8) & 0xff;
+    
+    printf("MAC in registers: %02x:%02x:%02x:%02x:%02x:%02x\n",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    printf("MAC in ARP sent:  24:0b:2a:21:09:20\n");
+    
+    if (mac[0] == 0x24 && mac[1] == 0x0b && mac[2] == 0x2a &&
+        mac[3] == 0x21 && mac[4] == 0x09 && mac[5] == 0x20) {
+        printf("✓ MAC addresses MATCH\n");
+    } else {
+        printf("✗ MAC addresses MISMATCH - This is the problem!\n");
+    }
+}
 
 void eth_intr(void)
 {
@@ -1243,7 +1441,7 @@ void eth_intr(void)
         printf("  RX packet received\n");
         // Handle RX packet
         // TODO: Process RX descriptors, read packet data
-        eth_rx_packets();
+        // eth_rx_packets();
     }
     
     if (dma_status & (1 << 2)) {  // TU - Transmit Buffer Unavailable
@@ -1269,4 +1467,112 @@ void eth_intr(void)
     
     // Clear interrupts by writing back the status bits
     writel(dma_status & 0x1FFFF, &dma_p->status);
+}
+
+
+void enable_promiscuous_mode(void)
+{
+    uint32_t framefilt = readl(&priv.mac_regs_p->framefilt);
+    
+    printf("Frame filter before: 0x%08x\n", framefilt);
+    
+    // Enable promiscuous mode - receive ALL packets
+    framefilt |= (1 << 0);  // PM bit
+    
+    writel(framefilt, &priv.mac_regs_p->framefilt);
+    
+    printf("Frame filter after:  0x%08x\n", readl(&priv.mac_regs_p->framefilt));
+    printf("Promiscuous mode enabled\n");
+}
+
+void test_send_arp(void)
+{
+    struct arp_packet *arp;
+    uint8_t *pkt_buf;
+    
+    // Allocate packet buffer (or use static buffer)
+    static uint8_t arp_buf[64];  // ARP is 42 bytes, pad to 64
+    pkt_buf = arp_buf;
+    memset(pkt_buf, 0, 64);
+    
+    arp = (struct arp_packet *)pkt_buf;
+    
+    printf("\n=== Sending ARP Request ===\n");
+    
+    // 1. Ethernet header
+    // Destination: Broadcast (FF:FF:FF:FF:FF:FF)
+    memset(arp->eth_dst, 0xFF, 6);
+
+    
+    // Source: Your MAC address (replace with your actual MAC)
+    arp->eth_src[0] = 0x24;
+    arp->eth_src[1] = 0x0b;
+    arp->eth_src[2] = 0x2a;
+    arp->eth_src[3] = 0x21;
+    arp->eth_src[4] = 0x09;
+    arp->eth_src[5] = 0x20;
+    
+    // EtherType: ARP (0x0806)
+    arp->eth_type = htons(0x0806);
+    
+    // 2. ARP header
+    arp->hw_type = htons(1);        // Ethernet
+    arp->proto_type = htons(0x0800); // IPv4
+    arp->hw_size = 6;               // MAC address size
+    arp->proto_size = 4;            // IPv4 address size
+    arp->opcode = htons(1);         // ARP Request
+    
+    // Sender MAC (same as eth_src)
+    memcpy(arp->sender_mac, arp->eth_src, 6);
+    
+    // Sender IP: 192.168.1.100 (replace with your xv6 IP)
+    arp->sender_ip[0] = 192;
+    arp->sender_ip[1] = 168;
+    arp->sender_ip[2] = 0;
+    arp->sender_ip[3] = 72;
+    
+    // Target MAC: 00:00:00:00:00:00 (unknown, that's why we're asking)
+    memset(arp->target_mac, 0, 6);
+    
+    // Target IP: 192.168.1.1 (replace with your PC's IP)
+    arp->target_ip[0] = 192;
+    arp->target_ip[1] = 168;
+    arp->target_ip[2] = 0;
+    arp->target_ip[3] = 59;
+    
+    // Print packet info
+    printf("Sending ARP: Who has %d.%d.%d.%d? Tell %d.%d.%d.%d\n",
+           arp->target_ip[0], arp->target_ip[1], 
+           arp->target_ip[2], arp->target_ip[3],
+           arp->sender_ip[0], arp->sender_ip[1],
+           arp->sender_ip[2], arp->sender_ip[3]);
+    
+    printf("Source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+           arp->eth_src[0], arp->eth_src[1], arp->eth_src[2],
+           arp->eth_src[3], arp->eth_src[4], arp->eth_src[5]);
+    
+    // 3. Send packet
+    int ret = designware_eth_send(pkt_buf, 42);  // ARP is 42 bytes (14 + 28)
+    
+    if (ret == 0) {
+        printf("ARP request sent successfully!\n");
+    } else {
+        printf("Failed to send ARP request\n");
+    }
+    
+    // Dump first few bytes for debugging
+    printf("Packet dump (first 42 bytes):\n");
+    for (int i = 0; i < 42; i++) {
+        printf("%02x ", pkt_buf[i]);
+        if ((i + 1) % 16 == 0) printf("\n");
+    }
+    printf("\n");
+
+	printf("\n--- Waiting for ARP Reply (3 seconds) ---\n");
+    for (int i = 0; i < 3000000; i++) {
+        asm volatile("nop");
+    }
+    
+    // 4. Check if packet arrived
+    printf("\n--- Checking After Wait ---\n");
 }

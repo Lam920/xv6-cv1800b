@@ -3,6 +3,7 @@
 
 #include "../types.h"
 #include "net.h"
+#include "../spinlock.h"
 
 #define CONFIG_SYS_HZ 1000
 #define CACHE_LINE_SIZE 64  // C906 typically has 64-byte cache lines
@@ -133,6 +134,8 @@
 #define DMA_INTR_ENA_TIE    (1 << 0)   // Transmit Interrupt Enable
 
 
+#define ETH_ZLEN 60
+
 struct eth_dma_regs {
 	uint32_t busmode;		/* 0x00 */
 	uint32_t txpolldemand;	/* 0x04 */
@@ -192,6 +195,9 @@ struct dw_eth_dev {
 	struct eth_dma_regs *dma_regs_p;
 	struct phy_device *phydev;
 	struct mii_dev *bus;
+
+	/* Locking mechanism */
+	struct spinlock eth_lock;
 };
 
 
@@ -220,5 +226,34 @@ void designware_eth_stop();
 int designware_eth_write_hwaddr(uint8_t *enetaddr);
 
 extern struct eth_ops designware_eth_ops;
+
+
+
+// ARP packet structure
+struct arp_packet {
+    // Ethernet header (14 bytes)
+    uint8_t  eth_dst[6];      // Destination MAC (broadcast for ARP request)
+    uint8_t  eth_src[6];      // Source MAC (your MAC)
+    uint16_t eth_type;        // 0x0806 for ARP
+    
+    // ARP header (28 bytes)
+    uint16_t hw_type;         // Hardware type (1 = Ethernet)
+    uint16_t proto_type;      // Protocol type (0x0800 = IPv4)
+    uint8_t  hw_size;         // Hardware address size (6 for MAC)
+    uint8_t  proto_size;      // Protocol address size (4 for IPv4)
+    uint16_t opcode;          // 1 = request, 2 = reply
+    uint8_t  sender_mac[6];   // Sender MAC address
+    uint8_t  sender_ip[4];    // Sender IP address
+    uint8_t  target_mac[6];   // Target MAC (00:00:00:00:00:00 for request)
+    uint8_t  target_ip[4];    // Target IP address
+} __attribute__((packed));
+
+inline uint16_t htons(uint16_t n) {
+    return ((n & 0xff) << 8) | ((n & 0xff00) >> 8);
+}
+
+void test_send_arp(void);
+void check_mac_address(void);
+void enable_promiscuous_mode(void);
 
 #endif // DESIGNWARE_H

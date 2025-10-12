@@ -55,11 +55,11 @@
 #define SD0 0x04310000
 #define SD0_IRQ     36
 
+
+#define ETH0_IRQ    31
+
 #define INTERVAL     250000UL
 #define US_INTERVAL  25UL
-
-
-#define ETH0_IRQ  31
 
 
 #endif

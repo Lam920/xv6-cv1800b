@@ -200,7 +200,7 @@ devintr()
     } 
     else if (irq == ETH0_IRQ) {
       // dw ethernet interrupt
-      //printf("[plic] got eth irq=%d\n", irq);
+      printf("[plic] got eth irq=%d\n", irq);
       eth_intr();
     }
     else if(irq){
