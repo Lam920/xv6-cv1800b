@@ -184,7 +184,7 @@ struct dw_eth_dev {
 	struct dmamacdescr tx_mac_descrtable[CONFIG_TX_DESCR_NUM];
 	struct dmamacdescr rx_mac_descrtable[CONFIG_RX_DESCR_NUM];
 	char txbuffs[TX_TOTAL_BUFSIZE] __attribute__((aligned(ARCH_DMA_MINALIGN)));
-	char rxbuffs[RX_TOTAL_BUFSIZE] __attribute__((aligned(ARCH_DMA_MINALIGN)));
+	char *rxbuffs[CONFIG_RX_DESCR_NUM] __attribute__((aligned(ARCH_DMA_MINALIGN)));
 
 	uint32_t interface;
 	uint32_t max_speed;

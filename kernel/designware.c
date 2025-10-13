@@ -23,6 +23,8 @@
 #include "include/ethtool.h"
 #include "bitops.h"
 
+static struct spinlock rx_lock;
+
 static int dw_mdio_read(struct mii_dev *bus, int addr, int devad, int reg);
 static int dw_mdio_write(struct mii_dev *bus, int addr, int devad, int reg, u16 val);
 
@@ -1183,9 +1185,10 @@ static void tx_descs_init()
 
 static void rx_descs_init()
 {
+	initlock(&rx_lock, "eth_rx");
 	struct eth_dma_regs *dma_p = priv.dma_regs_p;
 	struct dmamacdescr *desc_table_p = &priv.rx_mac_descrtable[0];
-	char *rxbuffs = &priv.rxbuffs[0];
+	char **rxbuffs = priv.rxbuffs;
 	struct dmamacdescr *desc_p;
 	u32 idx;
 
@@ -1195,11 +1198,13 @@ static void rx_descs_init()
 	 * Otherwise there's a chance to get some of them flushed in RAM when
 	 * GMAC is already pushing data to RAM via DMA. This way incoming from
 	 * GMAC data will be corrupted. */
-	flush_dcache_range((ulong)rxbuffs, (ulong)rxbuffs + RX_TOTAL_BUFSIZE);
+	// flush_dcache_range((ulong)rxbuffs, (ulong)rxbuffs + RX_TOTAL_BUFSIZE);
 
 	for (idx = 0; idx < CONFIG_RX_DESCR_NUM; idx++) {
 		desc_p = &desc_table_p[idx];
-		desc_p->dmamac_addr = (ulong)&rxbuffs[idx * CONFIG_ETH_BUFSIZE];
+		rxbuffs[idx] = kalloc();
+		flush_dcache_range((ulong)rxbuffs[idx], (ulong)rxbuffs[idx] + PGSIZE);
+		desc_p->dmamac_addr = (ulong)rxbuffs[idx];
 		desc_p->dmamac_next = (ulong)&desc_table_p[idx + 1];
 
 		desc_p->dmamac_cntl =
