@@ -1488,6 +1488,7 @@ void eth_intr_rx_packets() {
 	uchar *packet;
 	int length;
 	int received = 0;
+	uint32_t status;
 
 	struct eth_dma_regs *dma_p = (struct eth_dma_regs *)priv.dma_regs_p;
 
@@ -1536,7 +1537,7 @@ void eth_intr_rx_packets() {
 		// Ensure all writes complete before setting ownership
         __sync_synchronize();  // Memory barrier
 
-		desc_p->txrx_status |= DESC_RXSTS_OWNBYDMA;
+		desc_p->txrx_status = DESC_RXSTS_OWNBYDMA;
 
 		// Flush descriptor to memory for DMA
 		flush_dcache_range((ulong)desc_p, (ulong)desc_p + sizeof(*desc_p));
@@ -1546,7 +1547,12 @@ void eth_intr_rx_packets() {
 		priv.rx_currdescnum = desc_num;
 		release(&rx_lock);
 
-		
+		// Check if RX DMA suspended and resume if needed
+		status = readl(&dma_p->status);
+		if (status & (1 << 7)) {  // RU bit
+			printf("RX: DMA suspended, resuming\n");
+			writel(1, &dma_p->rxpolldemand);
+		}
 		
 		// // Free the packet buffer back to DMA
 		// designware_eth_free_pkt(packet, length);

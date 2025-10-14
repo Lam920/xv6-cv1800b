@@ -297,4 +297,19 @@ extern uint8 local_mac[ETHADDR_LEN];
 extern uint32 local_ip;
 
 
+/* ICMP message types */
+#define IPPROTO_ICMP	1
+#define ICMP_ECHO_REQUEST	8
+#define ICMP_ECHO_REPLY	0
+
+// ICMP header structure (add this to your headers)
+struct icmp {
+  uint8_t type;
+  uint8_t code;
+  uint16_t checksum;
+  uint16_t id;
+  uint16_t sequence;
+};
+
+
 #endif // NET_H
