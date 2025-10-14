@@ -25,6 +25,9 @@
 
 static struct spinlock rx_lock;
 
+/* Queue for rx packets stored */
+struct rx_queue rx_queue;
+
 static int dw_mdio_read(struct mii_dev *bus, int addr, int devad, int reg);
 static int dw_mdio_write(struct mii_dev *bus, int addr, int devad, int reg, u16 val);
 
@@ -1186,6 +1189,7 @@ static void tx_descs_init()
 static void rx_descs_init()
 {
 	initlock(&rx_lock, "eth_rx");
+	initlock(&rx_queue.lock, "rx_queue");
 	struct eth_dma_regs *dma_p = priv.dma_regs_p;
 	struct dmamacdescr *desc_table_p = &priv.rx_mac_descrtable[0];
 	char **rxbuffs = priv.rxbuffs;
@@ -1319,7 +1323,9 @@ static int _dw_eth_send(struct dw_eth_dev *priv, void *packet, int length)
 
 static int _dw_eth_recv(struct dw_eth_dev *priv, uchar **packetp)
 {
+	acquire(&rx_lock);
 	u32 status, desc_num = priv->rx_currdescnum;
+	release(&rx_lock);
 	struct dmamacdescr *desc_p = &priv->rx_mac_descrtable[desc_num];
 	int length = -EAGAIN;
 	ulong desc_start = (ulong)desc_p;
@@ -1379,7 +1385,7 @@ void eth_init(void)
 	// enable_promiscuous_mode();
 	initlock(&priv.eth_lock, "eth_lock");
 	check_mac_address();
-	test_send_arp();
+	// test_send_arp();
 }
 
 int designware_eth_send(void *packet, int length) {
@@ -1446,7 +1452,7 @@ void eth_intr(void)
         printf("  RX packet received\n");
         // Handle RX packet
         // TODO: Process RX descriptors, read packet data
-        // eth_rx_packets();
+        eth_intr_rx_packets();
     }
     
     if (dma_status & (1 << 2)) {  // TU - Transmit Buffer Unavailable
@@ -1472,6 +1478,85 @@ void eth_intr(void)
     
     // Clear interrupts by writing back the status bits
     writel(dma_status & 0x1FFFF, &dma_p->status);
+}
+
+/*
+Store received packets into a queue for processing in the future, 
+wakeup if any process is waiting for packets.
+*/
+void eth_intr_rx_packets() {
+	uchar *packet;
+	int length;
+	int received = 0;
+
+	struct eth_dma_regs *dma_p = (struct eth_dma_regs *)priv.dma_regs_p;
+
+	while ((length = designware_eth_recv(0, &packet)) > 0) {
+		// Got a packet
+		received++;
+		printf("  RX packet of length %d bytes\n", length);
+
+		ulong curr_desc_addr = readl(&dma_p->currhostrxdesc);
+        u32 desc_num_check = (curr_desc_addr - (ulong)priv.rx_mac_descrtable) / sizeof(struct dmamacdescr);
+
+		acquire(&rx_lock);
+		u32 desc_num = priv.rx_currdescnum;
+		release(&rx_lock);
+
+		printf("[dw] desc_num_check: %d, desc_num: %d\n", desc_num_check, desc_num);
+
+		struct dmamacdescr *desc_p = &priv.rx_mac_descrtable[desc_num];
+
+		if (rx_queue.count < RX_QUEUE_SIZE) {
+			/* 
+			Add packet to queue if is UDP/TCP packet, if is ARP request,
+			Send ARP reply immediately.
+			*/
+			if (net_rx((char *)packet, length)){
+				acquire(&rx_queue.lock);
+				rx_queue.count++;
+				release(&rx_queue.lock);
+			}
+		}
+
+		/*
+		Allocate new page for new rx packets. Assign init value
+		for this rx packets later. Old packet point by DMA RX desc 
+		is processing by net_rx. If complete ==> Free old packet
+		*/
+		void *new_buffer = kalloc();
+		if (!new_buffer) {
+			panic("eth_intr_rx_packets: out of memory\n");
+		}
+		acquire(&rx_lock);
+		priv.rxbuffs[desc_num] = new_buffer;
+
+		flush_dcache_range((ulong)priv.rxbuffs[desc_num], (ulong)priv.rxbuffs[desc_num] + PGSIZE);
+		desc_p->dmamac_addr = (ulong)priv.rxbuffs[desc_num];
+		// Ensure all writes complete before setting ownership
+        __sync_synchronize();  // Memory barrier
+
+		desc_p->txrx_status |= DESC_RXSTS_OWNBYDMA;
+
+		// Flush descriptor to memory for DMA
+		flush_dcache_range((ulong)desc_p, (ulong)desc_p + sizeof(*desc_p));
+
+		if (++desc_num >= CONFIG_RX_DESCR_NUM)
+			desc_num = 0;
+		priv.rx_currdescnum = desc_num;
+		release(&rx_lock);
+
+		
+		
+		// // Free the packet buffer back to DMA
+		// designware_eth_free_pkt(packet, length);
+	}
+	
+	if (received == 0) {
+		printf("  No more packets to receive\n");
+	} else {
+		printf("  Total %d packets received and queued\n", received);
+	}
 }
 
 

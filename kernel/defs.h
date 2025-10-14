@@ -258,4 +258,7 @@ void            phy_init(void);
 void            eth_init(void);
 void            eth_intr(void);
 
+// net.c
+int             net_rx(char *buf, int len);
+
 #endif

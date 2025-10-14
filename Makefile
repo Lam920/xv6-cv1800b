@@ -42,6 +42,7 @@ OBJS = \
   $K/vfsmount.o \
   $K/s5.o \
   $K/ext2.o \
+  $K/net.o \
   $K/designware.o
 
 
@@ -49,7 +50,7 @@ $K/ramdisk_data.o: fs.img
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
-TOOLPREFIX = /home/lambt9/Desktop/Porting_xv6/duo-buildroot-sdk/host-tools/gcc/riscv64-elf-x86_64/bin/riscv64-unknown-elf-
+TOOLPREFIX = /home/lambt/Desktop/porting_xv6/duo-buildroot-sdk/host-tools/gcc/riscv64-elf-x86_64/bin/riscv64-unknown-elf-
 
 # Try to infer the correct TOOLPREFIX if not set
 ifndef TOOLPREFIX

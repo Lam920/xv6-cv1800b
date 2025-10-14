@@ -35,12 +35,12 @@
 		__asm__ __volatile__(OP); \
 	 __asm__ __volatile__(SYNC_S)
 
-void invalidate_dcache_range(unsigned long start, unsigned long end)
+static inline void invalidate_dcache_range(unsigned long start, unsigned long end)
 {
 	CACHE_OP_RANGE(DCACHE_IPA_A0, start, end - start);
 }
 
-void flush_dcache_range(unsigned long start, unsigned long end)
+static inline void flush_dcache_range(unsigned long start, unsigned long end)
 {
 	CACHE_OP_RANGE(DCACHE_CIPA_A0, start, end - start);
 }

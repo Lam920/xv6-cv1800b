@@ -248,12 +248,10 @@ struct arp_packet {
     uint8_t  target_ip[4];    // Target IP address
 } __attribute__((packed));
 
-inline uint16_t htons(uint16_t n) {
-    return ((n & 0xff) << 8) | ((n & 0xff00) >> 8);
-}
-
 void test_send_arp(void);
 void check_mac_address(void);
 void enable_promiscuous_mode(void);
+
+void eth_intr_rx_packets();
 
 #endif // DESIGNWARE_H
