@@ -5,7 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
-#include "include/rtc.h"
+#include "include/time.h"
 
 uint64
 sys_exit(void)
@@ -91,7 +91,7 @@ sys_uptime(void)
   return xticks;
 }
 
-uint64 sys_gettimeofday(void)
+uint64 sys_gettimeofday0(void)
 {
   struct proc *p = myproc();
   uint64_t addr;

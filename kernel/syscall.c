@@ -103,7 +103,7 @@ extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_ioctl(void);
 extern uint64 sys_mount(void);
-extern uint64 sys_gettimeofday(void);
+extern uint64 sys_gettimeofday0(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -131,7 +131,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 [SYS_ioctl]   sys_ioctl,
 [SYS_mount]   sys_mount,
-[SYS_gettimeofday] sys_gettimeofday,
+[SYS_gettimeofday0] sys_gettimeofday0,
 };
 
 void

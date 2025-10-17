@@ -4,7 +4,7 @@
 #include "io.h"
 #include "printf.h"
 #include "spinlock.h"
-#include "include/rtc.h"
+#include "include/time.h"
 
 /* Spinlock for RTC */
 struct spinlock rtc_lock;

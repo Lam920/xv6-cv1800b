@@ -1,20 +1,20 @@
 // user/timetest_simple.c
-// Simple test program for gettimeofday
+// Simple test program for gettimeofday0
 
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "user/user.h"
-#include "kernel/include/rtc.h"
+#include "kernel/include/time.h"
 
 int main(int argc, char *argv[]) {
     struct timeval tv;
     
-    printf("Testing gettimeofday syscall...\n\n");
+    printf("Testing gettimeofday0 syscall...\n\n");
     
     // Test 1: Get current time
     printf("Test 1: Get current time\n");
-    if (gettimeofday(&tv, 0) < 0) {
-        printf("  ERROR: gettimeofday failed!\n");
+    if (gettimeofday0(&tv, 0) < 0) {
+        printf("  ERROR: gettimeofday0 failed!\n");
         exit(1);
     }
     printf("  Success! tv_sec = %d, tv_usec = %d\n", tv.tv_sec, tv.tv_usec);
@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
     
     int timeout = 0;
     while (timeout < 10) {
-        gettimeofday(&tv, 0);
+        gettimeofday0(&tv, 0);
         if (tv.tv_sec != prev_sec) {
             printf("  Time changed! Old: %d, New: %d\n", prev_sec, tv.tv_sec);
             printf("  ✓ Time is incrementing correctly!\n");
@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
     // Test 3: Show time for 5 seconds
     printf("\nTest 3: Display time for 5 seconds\n");
     for (int i = 0; i < 5; i++) {
-        gettimeofday(&tv, 0);
+        gettimeofday0(&tv, 0);
         
         // Convert to hours:minutes:seconds
         int total = tv.tv_sec;

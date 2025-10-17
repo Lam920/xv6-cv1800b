@@ -38,4 +38,4 @@ entry("sleep");
 entry("uptime");
 entry("ioctl");
 entry("mount");
-entry("gettimeofday");
+entry("gettimeofday0");

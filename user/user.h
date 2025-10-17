@@ -34,7 +34,7 @@ int uptime(void);
 int ioctl(int, unsigned long, void*);
 int mount(const char *dev, const char *path, const char *fs_type);
 int ls_ext2(char *path);
-int gettimeofday(struct timeval *tv, void *tz);
+int gettimeofday0(struct timeval *tv, void *tz);
 
 // ulib.c
 int stat(const char*, struct stat*);

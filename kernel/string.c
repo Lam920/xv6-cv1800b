@@ -151,13 +151,23 @@ strcmp(const char *p, const char *q)
 
 void *memscan(void *addr, int c, size_t size)
 {
-    unsigned char *p = addr;
-    unsigned char ch = (unsigned char)c;
+  unsigned char *p = addr;
+  unsigned char ch = (unsigned char)c;
 
-    while (size--) {
-        if (*p == ch)
-            return p;
-        p++;
-    }
-    return p;  // if not found, return first address after range
+  while (size--) {
+      if (*p == ch)
+          return p;
+      p++;
+  }
+  return p;  // if not found, return first address after range
+}
+
+int
+strnlen(const char *s, uint z)
+{
+  int n;
+
+  for (n = 0; z > 0 && s[n]; n++, z--)
+    ;
+  return n;
 }

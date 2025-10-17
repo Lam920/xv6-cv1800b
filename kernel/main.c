@@ -8,12 +8,24 @@
 #include "include/vfsmount.h"
 #include "include/list.h"
 #include "spinlock.h"
+#include "include/time.h"
 
 volatile static int started = 0;
 volatile static unsigned long main_hartid = ~0UL;
 
 extern volatile unsigned long uart_base;
 extern char _bss_start[], _bss_end[];
+
+static void
+printdate()
+{
+  static struct timeval tv;
+  static struct tm tm;
+  gettimeofday(&tv, NULL);
+  localtime_r(&tv.tv_sec, &tm);
+  printf("%d/%d/%d %d:%d:%d\n",
+    tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+}
 
 
 static void initfss(void);
@@ -62,7 +74,6 @@ main()
     installrootfs();
     printf("Done initfss\n");
 
-
 #ifdef GPIO_DRIVER
     gpioinit();
 #endif
@@ -80,6 +91,7 @@ main()
 #endif
     rtc_init();
     printf("Done rtc_init\n");
+    printdate();
     phy_init();
     eth_init();
     printf("Do userinit\n");

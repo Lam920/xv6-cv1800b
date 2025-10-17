@@ -12,6 +12,8 @@ struct sleeplock;
 struct stat;
 struct superblock;
 struct emmc;
+struct timeval;
+struct tm;
 
 // bio.c
 void            binit(void);
@@ -161,6 +163,7 @@ void            strconcat(char*, const char*, const char*);
 void            itoa(int, char*);
 int             strcmp(const char*, const char*);
 void *          memscan(void *addr, int c, int size);
+int             strnlen(const char *s, int z);
 
 // syscall.c
 void            argint(int, int*);
@@ -264,5 +267,11 @@ int             net_rx(char *buf, int len);
 // rtc.c
 void            rtc_init(void);
 uint64_t        rtc_get_time(void);
+
+// time.c
+time_t          time(time_t*);
+int             gettimeofday(struct timeval*, void*);
+time_t          mktime(struct tm*);
+struct tm*      localtime_r(const time_t*, struct tm*);
 
 #endif

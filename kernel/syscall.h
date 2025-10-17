@@ -25,4 +25,4 @@
 
 
 #define SYS_trace     24
-#define SYS_gettimeofday 25
+#define SYS_gettimeofday0 25
