@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "include/rtc.h"
 
 uint64
 sys_exit(void)
@@ -88,4 +89,22 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64 sys_gettimeofday(void)
+{
+  struct proc *p = myproc();
+  uint64_t addr;
+  struct timeval tv;
+  
+  argaddr(0, &addr);
+  
+  tv.tv_sec = rtc_get_time();
+  tv.tv_usec = 0;  // 1-second resolution
+  
+  if (copyout(p->pagetable, addr, (char *)&tv, sizeof(tv)) < 0)
+      return -1;
+  
+  return 0;
+
 }

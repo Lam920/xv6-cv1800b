@@ -90,6 +90,10 @@ kvmmake(void)
 #ifdef SPI0
   kvmmap(kpgtbl, SPI0, SPI0, PGSIZE, PTE_DEVICE);
 #endif
+
+  kvmmap(kpgtbl, RTC_CTRL_BASE, RTC_CTRL_BASE, PGSIZE, PTE_DEVICE);
+  kvmmap(kpgtbl, RTC_CORE_BASE, RTC_CORE_BASE, PGSIZE, PTE_DEVICE);
+
   printf("Map for ETH0_BASE\n");
   kvmmap(kpgtbl, ETH0_BASE, ETH0_BASE, PGSIZE, PTE_DEVICE);
   printf("Map for ETH0_DMA\n");

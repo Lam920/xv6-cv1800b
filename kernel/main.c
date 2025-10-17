@@ -78,6 +78,8 @@ main()
 #ifdef SPI_DRIVER
     spiinit();
 #endif
+    rtc_init();
+    printf("Done rtc_init\n");
     phy_init();
     eth_init();
     printf("Do userinit\n");

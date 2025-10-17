@@ -42,6 +42,7 @@ OBJS = \
   $K/vfsmount.o \
   $K/s5.o \
   $K/ext2.o \
+  $K/rtc.o \
   $K/net.o \
   $K/designware.o
 
@@ -163,6 +164,7 @@ UPROGS=\
 	$U/_spi\
 	$U/_mount\
 	$U/_ls_ext2\
+	$U/_timetest_simple\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
