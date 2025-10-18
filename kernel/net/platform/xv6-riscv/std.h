@@ -3,6 +3,7 @@
 
 #include "kernel/include/time.h"
 #include "kernel/errno.h"
+#include <stdarg.h>
 
 #define UINT16_MAX 65535
 
@@ -21,15 +22,15 @@ typedef struct {
 
 extern FILE *stderr;
 
-// #define fprintf(fp, ...) printf(__VA_ARGS__)
-// #define vfprintf(fp, ...) vcprintf(__VA_ARGS__)
+#define fprintf(fp, ...) printf(__VA_ARGS__)
+#define vfprintf(fp, ...) vcprintf(__VA_ARGS__)
 
 extern void
 flockfile(FILE *fp);
 extern void
 funlockfile(FILE *fp);
-// extern int
-// vfprintf(FILE *fp, const char *fmt, va_list ap);
+extern int
+vfprintf(FILE *fp, const char *fmt, va_list ap);
 
 /*
  * Time
