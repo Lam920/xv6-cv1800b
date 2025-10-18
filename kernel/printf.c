@@ -223,6 +223,22 @@ loop:
     return count;
 }
 
+static void
+putch(int ch, int *cnt)
+{
+  consputc(ch);
+  (void)*cnt++;
+}
+
+int
+vcprintf(const char *fmt, va_list ap)
+{
+  int cnt = 0;
+
+  vprintfmt((void*)putch, &cnt, fmt, ap);
+  return cnt;
+}
+
 int printf(const char *fmt, ...)
 {
     int count, locking;
@@ -280,3 +296,4 @@ int backtrace(void) {
 
   return 0;
 }
+

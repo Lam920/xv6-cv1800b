@@ -1,11 +1,14 @@
 K=kernel
 U=user
+N=$K/net
+P=$N/platform/xv6-riscv
 
 OBJS = \
   $K/entry.o \
   $K/start.o \
   $K/console.o \
   $K/printf.o \
+  $K/printfmt.o \
   $K/uart.o \
   $K/kalloc.o \
   $K/spinlock.o \
@@ -44,6 +47,7 @@ OBJS = \
   $K/ext2.o \
   $K/rtc.o \
   $K/time.o \
+  $P/std.o \
   $K/net.o \
   $K/designware.o
 
@@ -52,7 +56,7 @@ $K/ramdisk_data.o: fs.img
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
-TOOLPREFIX = /home/lambt/Desktop/porting_xv6/duo-buildroot-sdk/host-tools/gcc/riscv64-elf-x86_64/bin/riscv64-unknown-elf-
+TOOLPREFIX = /home/lambt9/Desktop/Porting_xv6/duo-buildroot-sdk/host-tools/gcc/riscv64-elf-x86_64/bin/riscv64-unknown-elf-
 
 # Try to infer the correct TOOLPREFIX if not set
 ifndef TOOLPREFIX
@@ -80,7 +84,8 @@ CFLAGS = -march=rv64gc_zihintpause -Wall -Werror -Os -fno-omit-frame-pointer -gg
 CFLAGS += -MD
 CFLAGS += -mcmodel=medany
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
-CFLAGS += -I.
+CFLAGS += -fno-builtin-free -fno-builtin-strnlen -fno-builtin-snprintf -fno-builtin-vsnprintf
+CFLAGS += -I. -I $K -I $N -I $P
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 
 # Disable PIE when possible (for Ubuntu 16.10 toolchain)
@@ -170,7 +175,7 @@ UPROGS=\
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
 
--include kernel/*.d user/*.d
+-include $K/*.d $U/*.d $N/*.d $P/*.d
 
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
