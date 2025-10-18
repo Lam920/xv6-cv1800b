@@ -273,6 +273,10 @@ void            eth_intr(void);
 // net.c
 int             net_rx(char *buf, int len);
 
+// net/net.c
+void            netinit(void);
+void            netrun(void);
+
 // rtc.c
 void            rtc_init(void);
 uint64_t        rtc_get_time(void);

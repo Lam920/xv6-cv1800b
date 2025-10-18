@@ -48,6 +48,7 @@ OBJS = \
   $K/rtc.o \
   $K/time.o \
   $N/util.o \
+  $N/net.o \
   $P/std.o \
   $K/net.o \
   $K/designware.o
