@@ -185,9 +185,11 @@ void            syscall();
 
 // trap.c
 extern uint     ticks;
+extern uint64   pending;
 void            trapinit(void);
 void            trapinithart(void);
 extern struct spinlock tickslock;
+extern struct spinlock pendinglock;
 void            usertrapret(void);
 
 // uart.c
@@ -277,6 +279,8 @@ int             net_rx(char *buf, int len);
 // net/net.c
 void            netinit(void);
 void            netrun(void);
+int             net_softirq_handler(void);
+int             net_event_handler(void);
 
 struct net_device* net_device_alloc(void);
 

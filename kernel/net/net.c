@@ -2,6 +2,7 @@
 
 #include "util.h"
 #include "net.h"
+#include "kernel/net/platform/xv6-riscv/platform.h"
 
 struct net_protocol {
     struct net_protocol *next;

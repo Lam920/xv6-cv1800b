@@ -55,6 +55,8 @@ w_mepc(uint64 x)
 }
 
 // Supervisor Status Register, sstatus
+// Supervisor Interrupt Pending
+#define SIP_SSIP (1L << 1)
 
 #define SSTATUS_SPP (1L << 8)  // Previous mode, 1=Supervisor, 0=User
 #define SSTATUS_SPIE (1L << 5) // Supervisor Previous Interrupt Enable
