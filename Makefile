@@ -54,6 +54,7 @@ OBJS = \
   $N/arp.o \
   $N/icmp.o \
   $N/udp.o \
+  $N/tcp.o \
   $P/std.o \
   $K/net.o \
   $K/designware.o
