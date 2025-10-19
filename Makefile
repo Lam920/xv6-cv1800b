@@ -53,6 +53,7 @@ OBJS = \
   $N/ip.o \
   $N/arp.o \
   $N/icmp.o \
+  $N/udp.o \
   $P/std.o \
   $K/net.o \
   $K/designware.o

@@ -5,7 +5,8 @@
 #include "ip.h"
 #include "arp.h"
 #include "icmp.h"
-#include "kernel/net/platform/xv6-riscv/platform.h"
+#include "udp.h"
+#include "platform.h"
 
 struct net_protocol {
     struct net_protocol *next;
@@ -352,6 +353,10 @@ net_init(void)
     }
     if (icmp_init() == -1) {
         errorf("icmp_init() failure");
+        return -1;
+    }
+    if (udp_init() == -1) {
+        errorf("udp_init() failure");
         return -1;
     }
     infof("initialized");
