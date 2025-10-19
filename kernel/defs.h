@@ -14,6 +14,7 @@ struct superblock;
 struct emmc;
 struct timeval;
 struct tm;
+struct net_device;
 
 // bio.c
 void            binit(void);
@@ -276,6 +277,8 @@ int             net_rx(char *buf, int len);
 // net/net.c
 void            netinit(void);
 void            netrun(void);
+
+struct net_device* net_device_alloc(void);
 
 // rtc.c
 void            rtc_init(void);

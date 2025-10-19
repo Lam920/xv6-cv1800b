@@ -1,9 +1,12 @@
 #ifndef DESIGNWARE_H
 #define DESIGNWARE_H
 
-#include "../types.h"
+#include "kernel/types.h"
 #include "net.h"
-#include "../spinlock.h"
+#include "kernel/spinlock.h"
+#include "kernel/net/util.h"
+#include "kernel/net/ether.h"
+#include "kernel/net/net.h"
 
 #define CONFIG_SYS_HZ 1000
 #define CACHE_LINE_SIZE 64  // C906 typically has 64-byte cache lines
@@ -181,6 +184,7 @@ struct dmamacdescr {
 } __attribute__((aligned(ARCH_DMA_MINALIGN)));
 
 struct dw_eth_dev {
+	struct net_device *dev; /* Net device represent driver with network stack */
 	struct dmamacdescr tx_mac_descrtable[CONFIG_TX_DESCR_NUM];
 	struct dmamacdescr rx_mac_descrtable[CONFIG_RX_DESCR_NUM];
 	char txbuffs[TX_TOTAL_BUFSIZE] __attribute__((aligned(ARCH_DMA_MINALIGN)));
@@ -189,7 +193,7 @@ struct dw_eth_dev {
 #else
 	char rxbuffs[RX_TOTAL_BUFSIZE] __attribute__((aligned(ARCH_DMA_MINALIGN)));
 #endif
-
+	char author[32];
 	uint32_t interface;
 	uint32_t max_speed;
 	uint32_t tx_currdescnum;
@@ -201,7 +205,7 @@ struct dw_eth_dev {
 	struct mii_dev *bus;
 
 	/* Locking mechanism */
-	struct spinlock eth_lock;
+	struct spinlock lock;
 };
 
 

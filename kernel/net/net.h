@@ -1,5 +1,5 @@
-#ifndef NET_H
-#define NET_H
+#ifndef NET2_H
+#define NET2_H
 
 #include "platform.h"
 

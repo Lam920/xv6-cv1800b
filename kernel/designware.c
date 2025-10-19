@@ -21,6 +21,7 @@
 #include "include/net.h"
 #include "include/cache.h"
 #include "include/ethtool.h"
+#include "kernel/net/net.h"
 #include "bitops.h"
 
 static struct spinlock rx_lock;
@@ -73,6 +74,8 @@ void phy_init(void) {
     priv.dma_regs_p = (struct eth_dma_regs *)(iobase + DW_DMA_BASE_OFFSET);
     priv.max_speed = 0;
 	priv.interface = PHY_INTERFACE_MODE_RMII;
+
+	memcpy(priv.author, "OpenAI_ChatGPT", strlen("OpenAI_ChatGPT"));
 
 
     /* Init designware ethernet bus ~ dw_mdio_init*/
@@ -1273,6 +1276,9 @@ int designware_eth_start(void)
 static int _dw_eth_send(struct dw_eth_dev *priv, void *packet, int length)
 {
 	struct eth_dma_regs *dma_p = priv->dma_regs_p;
+
+	acquire(&priv->lock);
+
 	u32 desc_num = priv->tx_currdescnum;
 	struct dmamacdescr *desc_p = &priv->tx_mac_descrtable[desc_num];
 	ulong desc_start = (ulong)desc_p;
@@ -1320,6 +1326,8 @@ static int _dw_eth_send(struct dw_eth_dev *priv, void *packet, int length)
 		desc_num = 0;
 
 	priv->tx_currdescnum = desc_num;
+
+	release(&priv->lock);
 
 	/* Start the transmission */
 	writel(POLL_DATA, &dma_p->txpolldemand);
@@ -1385,15 +1393,6 @@ static int _dw_free_pkt(struct dw_eth_dev *priv)
 	return 0;
 }
 
-void eth_init(void)
-{
-	designware_eth_ops.start();
-	// enable_promiscuous_mode();
-	initlock(&priv.eth_lock, "eth_lock");
-	check_mac_address();
-	// test_send_arp();
-}
-
 int designware_eth_send(void *packet, int length) {
 	return _dw_eth_send(&priv, packet, length);
 }
@@ -1457,7 +1456,6 @@ void eth_intr(void)
     if (dma_status & (1 << 6)) {  // RI - Receive Interrupt
         printf("  RX packet received\n");
         // Handle RX packet
-        // TODO: Process RX descriptors, read packet data
         eth_intr_rx_packets();
     }
     
@@ -1486,6 +1484,7 @@ void eth_intr(void)
     writel(dma_status & 0x1FFFF, &dma_p->status);
 }
 
+#if 0
 /*
 Store received packets into a queue for processing in the future, 
 wakeup if any process is waiting for packets.
@@ -1581,6 +1580,8 @@ void eth_intr_rx_packets() {
 	}
 }
 
+#endif
+
 
 void enable_promiscuous_mode(void)
 {
@@ -1597,94 +1598,103 @@ void enable_promiscuous_mode(void)
     printf("Promiscuous mode enabled\n");
 }
 
-void test_send_arp(void)
+
+static int eth_net_open(struct net_device *dev);
+static int eth_net_close(struct net_device *dev);
+static int eth_net_transmit(struct net_device *dev, uint16_t type, const uint8_t *packet, size_t len, const void *dst);
+
+#define PRIV(x) ((struct dw_eth_dev *)(x)->priv)
+static int eth_net_open(struct net_device *dev) {
+	struct dw_eth_dev *priv = PRIV(dev);
+	printf("Open ethernet net device of author: %s\n", priv->author);
+	return 0;
+}
+
+static int eth_net_close(struct net_device *dev) {
+	struct dw_eth_dev *priv = PRIV(dev);
+	printf("Close ethernet net device of author: %s\n", priv->author);
+	return 0;
+}
+
+/**
+ * net-dev API: Write a packet to the network via the designware MAC
+ *
+ * @param dev The network device
+ * @param packet The packet to write
+ * @param len The length of the packet
+ **/ 
+static ssize_t eth_net_write(struct net_device *dev, const uint8_t *data, size_t len) {
+	struct dw_eth_dev *priv = PRIV(dev);
+	return _dw_eth_send(priv, (void *)data, len);
+}
+
+static int
+eth_net_transmit(struct net_device *dev, uint16_t type, const uint8_t *packet, size_t len, const void *dst)
 {
-    struct arp_packet *arp;
-    uint8_t *pkt_buf;
-    
-    // Allocate packet buffer (or use static buffer)
-    static uint8_t arp_buf[64];  // ARP is 42 bytes, pad to 64
-    pkt_buf = arp_buf;
-    memset(pkt_buf, 0, 64);
-    
-    arp = (struct arp_packet *)pkt_buf;
-    
-    printf("\n=== Sending ARP Request ===\n");
-    
-    // 1. Ethernet header
-    // Destination: Broadcast (FF:FF:FF:FF:FF:FF)
-    memset(arp->eth_dst, 0xFF, 6);
+  return ether_transmit_helper(dev, type, packet, len, dst, eth_net_write);;
+}
 
-    
-    // Source: Your MAC address (replace with your actual MAC)
-    arp->eth_src[0] = 0x24;
-    arp->eth_src[1] = 0x0b;
-    arp->eth_src[2] = 0x2a;
-    arp->eth_src[3] = 0x21;
-    arp->eth_src[4] = 0x09;
-    arp->eth_src[5] = 0x20;
-    
-    // EtherType: ARP (0x0806)
-    arp->eth_type = htons(0x0806);
-    
-    // 2. ARP header
-    arp->hw_type = htons(1);        // Ethernet
-    arp->proto_type = htons(0x0800); // IPv4
-    arp->hw_size = 6;               // MAC address size
-    arp->proto_size = 4;            // IPv4 address size
-    arp->opcode = htons(1);         // ARP Request
-    
-    // Sender MAC (same as eth_src)
-    memcpy(arp->sender_mac, arp->eth_src, 6);
-    
-    // Sender IP: 192.168.1.100 (replace with your xv6 IP)
-    arp->sender_ip[0] = 192;
-    arp->sender_ip[1] = 168;
-    arp->sender_ip[2] = 0;
-    arp->sender_ip[3] = 72;
-    
-    // Target MAC: 00:00:00:00:00:00 (unknown, that's why we're asking)
-    memset(arp->target_mac, 0, 6);
-    
-    // Target IP: 192.168.1.1 (replace with your PC's IP)
-    arp->target_ip[0] = 192;
-    arp->target_ip[1] = 168;
-    arp->target_ip[2] = 0;
-    arp->target_ip[3] = 59;
-    
-    // Print packet info
-    printf("Sending ARP: Who has %d.%d.%d.%d? Tell %d.%d.%d.%d\n",
-           arp->target_ip[0], arp->target_ip[1], 
-           arp->target_ip[2], arp->target_ip[3],
-           arp->sender_ip[0], arp->sender_ip[1],
-           arp->sender_ip[2], arp->sender_ip[3]);
-    
-    printf("Source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-           arp->eth_src[0], arp->eth_src[1], arp->eth_src[2],
-           arp->eth_src[3], arp->eth_src[4], arp->eth_src[5]);
-    
-    // 3. Send packet
-    int ret = designware_eth_send(pkt_buf, 42);  // ARP is 42 bytes (14 + 28)
-    
-    if (ret == 0) {
-        printf("ARP request sent successfully!\n");
-    } else {
-        printf("Failed to send ARP request\n");
-    }
-    
-    // Dump first few bytes for debugging
-    printf("Packet dump (first 42 bytes):\n");
-    for (int i = 0; i < 42; i++) {
-        printf("%02x ", pkt_buf[i]);
-        if ((i + 1) % 16 == 0) printf("\n");
-    }
-    printf("\n");
+static ssize_t eth_net_read(struct net_device *dev, uint8_t *buf, size_t size) {
+	struct dw_eth_dev *priv = PRIV(dev);
+	uint32_t status;
+	struct eth_dma_regs *dma_p = (struct eth_dma_regs *)priv->dma_regs_p;
+	uchar *packet;
+	int length = _dw_eth_recv(priv, &packet);
+	if (length > 0 && (size_t)length <= size) {
+		memcpy(buf, packet, length);
+		_dw_free_pkt(priv);
+		status = readl(&dma_p->status);
+		if (status & (1 << 7)) {  // RU bit
+			printf("RX: DMA suspended, resuming\n");
+			writel(1, &dma_p->rxpolldemand);
+		}
+		return length;
+	}
+	return -EAGAIN;
+}
 
-	printf("\n--- Waiting for ARP Reply (3 seconds) ---\n");
-    for (int i = 0; i < 3000000; i++) {
-        asm volatile("nop");
+
+void eth_intr_rx_packets() {
+	acquire(&priv.lock);
+	/* Process packet */
+	ether_input_helper(priv.dev, eth_net_read);
+	release(&priv.lock);
+	/* Raise softirq to handle the packet later */
+	intr_raise_irq(INTR_IRQ_SOFTIRQ);
+}
+
+struct net_device_ops eth_net_ops = {
+    .open = eth_net_open,
+    .close = eth_net_close,
+    .transmit = eth_net_transmit,
+};
+
+void eth_init(void)
+{
+	designware_eth_ops.start();
+	uint8_t mac_addr[ETHADDR_LEN] = { 0x24, 0x0b, 0x2a, 0x21, 0x09, 0x20 };
+	// enable_promiscuous_mode();
+	char mac[ETHER_ADDR_STR_LEN];
+	initlock(&priv.lock, "lock");
+	check_mac_address();
+	struct net_device *dev;
+	// setup device driver structure
+    dev = net_device_alloc();
+	if (!dev) {
+        errorf("net_device_alloc() failure");
+        return;
     }
-    
-    // 4. Check if packet arrived
-    printf("\n--- Checking After Wait ---\n");
+	ether_setup_helper(dev);
+	memcpy(dev->addr, mac_addr, sizeof(mac_addr));
+	dev->priv = &priv;
+	dev->ops = &eth_net_ops;
+	if (net_device_register(dev) == -1) {
+        errorf("net_device_register() failure");
+        memory_free(dev);
+        return;
+    }
+	/* Assign abstract network device of driver point to struct net_device */
+	priv.dev = dev;
+	printf("Ethernet network device registered\n");
+	debugf("initialized, addr=%s", ether_addr_ntop(dev->addr, mac, sizeof(mac)));
 }
