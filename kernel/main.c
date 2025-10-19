@@ -92,8 +92,11 @@ main()
     rtc_init();
     printf("Done rtc_init\n");
     printdate();
+    netinit();   
     phy_init();
     eth_init();
+    netrun();
+
     printf("Do userinit\n");
     userinit();      // first user process
     printf("Done userinit\n");

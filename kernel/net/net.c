@@ -3,6 +3,7 @@
 #include "util.h"
 #include "net.h"
 #include "ip.h"
+#include "arp.h"
 #include "kernel/net/platform/xv6-riscv/platform.h"
 
 struct net_protocol {
@@ -157,7 +158,7 @@ int
 net_protocol_register(uint16_t type, void (*handler)(const uint8_t *data, size_t len, struct net_device *dev))
 {
     struct net_protocol *proto;
-
+    printf("************* [net] Enter net_protocol_register *****************\n");
     for (proto = protocols; proto; proto = proto->next) {
         if (type == proto->type) {
             errorf("already registered, type=0x%04x", type);
@@ -219,6 +220,8 @@ net_input_handler(uint16_t type, const uint8_t *data, size_t len, struct net_dev
 {
     struct net_protocol *proto;
     struct net_protocol_queue_entry *entry;
+
+    printf("************* [net] Enter net_input_handler *****************\n");
 
     for (proto = protocols; proto; proto = proto->next) {
         if (proto->type == type) {
@@ -340,6 +343,10 @@ net_init(void)
     }
     if (ip_init() == -1) {
         errorf("ip_init() failure");
+        return -1;
+    }
+    if (arp_init() == -1) {
+        errorf("arp_init() failure");
         return -1;
     }
     infof("initialized");
