@@ -187,6 +187,7 @@ softintr()
   uint64 irqs = pending;
   pending = 0;
   release(&pendinglock);
+  printf("softintr is fired\n");
 
   if(irqs & SOFT_IRQ_NET_RX) {
     net_softirq_handler();

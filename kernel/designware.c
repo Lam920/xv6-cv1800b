@@ -1333,7 +1333,7 @@ static int _dw_eth_send(struct dw_eth_dev *priv, void *packet, int length)
 	/* Start the transmission */
 	writel(POLL_DATA, &dma_p->txpolldemand);
 
-	return 0;
+	return length;
 }
 
 static int _dw_eth_recv(struct dw_eth_dev *priv, uchar **packetp)

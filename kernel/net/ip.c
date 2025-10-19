@@ -437,6 +437,19 @@ ip_generate_id(void)
     return ret;
 }
 
+static void dump_iface(struct ip_iface *iface)
+{
+    printf("Dump iface\n");
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[IP_ADDR_STR_LEN];
+    char addr3[IP_ADDR_STR_LEN];
+
+    printf("dev: %s\n", NET_IFACE(iface)->dev->name);
+    printf("unicast: %s\n", ip_addr_ntop(iface->unicast, addr1, sizeof(addr1)));
+    printf("netmask: %s\n", ip_addr_ntop(iface->netmask, addr2, sizeof(addr2)));
+    printf("broadcast: %s\n", ip_addr_ntop(iface->broadcast, addr3, sizeof(addr3)));
+}
+
 ssize_t
 ip_output(uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst)
 {
@@ -455,13 +468,18 @@ ip_output(uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_a
         errorf("no route to host, dst=%s", ip_addr_ntop(dst, addr, sizeof(addr)));
         return -1;
     }
+    printf("[net] Found candidate at : %p\n", route);
+    dump_iface(route->iface);
     iface = route->iface;
     if (src != IP_ADDR_ANY && src != iface->unicast) {
         errorf("unable to output with specified source address, src=%s", ip_addr_ntop(src, addr, sizeof(addr)));
         return -1;
     }
+    printf("[net] Now found next hop\n");
+    printf("[net] nexthop: %s\n", ip_addr_ntop(route->nexthop, addr, sizeof(addr)));
     nexthop = (route->nexthop != IP_ADDR_ANY) ? route->nexthop : dst;
-    debugf("[net] --------------next hop: %s ----------------", ip_addr_ntop(nexthop, addr, sizeof(addr)));
+    debugf("[net] do for next hop");
+    // debugf("[net] --------------next hop: %s ----------------", ip_addr_ntop(nexthop, addr, sizeof(addr)));
     if (NET_IFACE(iface)->dev->mtu < IP_HDR_SIZE_MIN + len) {
         errorf("too long, dev=%s, mtu=%u < %zu",
             NET_IFACE(iface)->dev->name, NET_IFACE(iface)->dev->mtu, IP_HDR_SIZE_MIN + len);

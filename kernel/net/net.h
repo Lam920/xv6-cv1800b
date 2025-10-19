@@ -19,6 +19,12 @@
 
 #define NET_DEVICE_ADDR_LEN 16
 
+#ifndef MAKE_IP_ADDR
+#define MAKE_IP_ADDR(a, b, c, d)           \
+  (((uint32)a << 24) | ((uint32)b << 16) | \
+   ((uint32)c << 8) | (uint32)d)
+#endif
+
 #define NET_DEVICE_IS_UP(x) ((x)->flags & NET_DEVICE_FLAG_UP)
 #define NET_DEVICE_STATE(x) (NET_DEVICE_IS_UP(x) ? "up" : "down")
 

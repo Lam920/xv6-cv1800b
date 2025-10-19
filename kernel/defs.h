@@ -1,6 +1,7 @@
 #ifndef INC_DEFS_H
 #define INC_DEFS_H
 #include "riscv.h"
+#include <stdarg.h>
 struct buf;
 struct context;
 struct file;
@@ -97,6 +98,7 @@ void            panic(char*) __attribute__((noreturn));
 void            printfinit(void);
 int             backtrace(void);
 int             snprintf(char*, int, const char*, ...);
+int             vprintf(const char *fmt, va_list args);
 
 
 // printfmt.c

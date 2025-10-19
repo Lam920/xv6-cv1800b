@@ -9,19 +9,13 @@
 int
 lprintf(FILE *fp, int level, const char *file, int line, const char *func, const char *fmt, ...)
 {
-    struct timeval tv;
-    struct tm tm;
-    char timestamp[32];
     int n = 0;
     va_list ap;
 
     flockfile(fp);
-    gettimeofday(&tv, NULL);
-    strftime(timestamp, sizeof(timestamp), "%T", localtime_r(&tv.tv_sec, &tm));
-    n += fprintf(fp, "%s.%03d [%c] %s: ", timestamp, (int)(tv.tv_usec / 1000), level, func);
+    n += printf("[%c] %s ", level, __func__);
     va_start(ap, fmt);
-    n += vfprintf(fp, fmt, ap);
-    va_end(ap);
+    n += vprintf(fmt, ap);
     n += fprintf(fp, " (%s:%d)\n", file, line);
     funlockfile(fp);
     return n;

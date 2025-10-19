@@ -66,6 +66,8 @@ struct tcp_segment_info {
     uint16_t up;
 };
 
+#define TCP_RCV_BUF_SIZE 65535
+
 struct tcp_pcb {
     int state;
     int mode; /* user command mode */
@@ -88,7 +90,7 @@ struct tcp_pcb {
     uint32_t irs;
     uint16_t mtu;
     uint16_t mss;
-    uint8_t buf[65535]; /* receive buffer */
+    uint8_t buf[TCP_RCV_BUF_SIZE]; /* receive buffer */
     struct sched_ctx ctx;
     struct queue_head queue; /* retransmit queue */
     struct tcp_pcb *parent;
@@ -109,33 +111,39 @@ static mutex_t mutex = MUTEX_INITIALIZER;
 static struct tcp_pcb pcbs[TCP_PCB_SIZE];
 
 static char *
-tcp_flg_ntoa(uint8_t flg)
+tcp_flg_ntoa(uint8_t flg, char *buf, size_t size)
 {
-    static char str[9];
-
-    snprintf(str, sizeof(str), "--%c%c%c%c%c%c",
+    if (size < 9) {
+        return NULL;
+    }
+    snprintf(buf, size, "--%c%c%c%c%c%c",
         TCP_FLG_ISSET(flg, TCP_FLG_URG) ? 'U' : '-',
         TCP_FLG_ISSET(flg, TCP_FLG_ACK) ? 'A' : '-',
         TCP_FLG_ISSET(flg, TCP_FLG_PSH) ? 'P' : '-',
         TCP_FLG_ISSET(flg, TCP_FLG_RST) ? 'R' : '-',
         TCP_FLG_ISSET(flg, TCP_FLG_SYN) ? 'S' : '-',
         TCP_FLG_ISSET(flg, TCP_FLG_FIN) ? 'F' : '-');
-    return str;
+    return buf;
 }
+
+
 
 static void
 tcp_dump(const uint8_t *data, size_t len)
 {
     struct tcp_hdr *hdr;
+    char flag_str[9];
 
     flockfile(stderr);
     hdr = (struct tcp_hdr *)data;
+    tcp_flg_ntoa(hdr->flg, flag_str, sizeof(flag_str));
+
     fprintf(stderr, "        src: %u\n", ntoh16(hdr->src));
     fprintf(stderr, "        dst: %u\n", ntoh16(hdr->dst));
     fprintf(stderr, "        seq: %u\n", ntoh32(hdr->seq));
     fprintf(stderr, "        ack: %u\n", ntoh32(hdr->ack));
     fprintf(stderr, "        off: 0x%02x (%d)\n", hdr->off, (hdr->off >> 4) << 2);
-    fprintf(stderr, "        flg: 0x%02x (%s)\n", hdr->flg, tcp_flg_ntoa(hdr->flg));
+    fprintf(stderr, "        flg: 0x%02x (%s)\n", hdr->flg, flag_str);
     fprintf(stderr, "        wnd: %u\n", ntoh16(hdr->wnd));
     fprintf(stderr, "        sum: 0x%04x\n", ntoh16(hdr->sum));
     fprintf(stderr, "         up: %u\n", ntoh16(hdr->up));
@@ -276,10 +284,17 @@ tcp_output_segment(uint32_t seq, uint32_t ack, uint8_t flg, uint16_t wnd, uint8_
         ip_endpoint_ntop(foreign, ep2, sizeof(ep2)),
         total, len);
     tcp_dump((uint8_t *)hdr, total);
+    printf("[net] now to TCP output\n");
+
+    __sync_synchronize();  // Memory barrier
+    
+    
     if (ip_output(IP_PROTOCOL_TCP, (uint8_t *)hdr, total, local->addr, foreign->addr) == -1) {
         memory_free(buf);
         return -1;
-    }
+    }  
+
+    printf("tcp_output_segment complete\n");
     memory_free(buf);
     return len;
 }
@@ -329,7 +344,17 @@ tcp_retransmit_queue_cleanup(struct tcp_pcb *pcb)
             break;
         }
         entry = queue_pop(&pcb->queue);
-        debugf("remove, seq=%u, flags=%s, len=%u", entry->seq, tcp_flg_ntoa(entry->flg), entry->len);
+        if (entry == NULL) {
+            printf("tcp_retransmit_queue_cleanup: queue_pop() returned NULL\n");
+            break;
+        }
+
+        char flag_str[9];
+        tcp_flg_ntoa(entry->flg, flag_str, sizeof(flag_str));
+        printf("remove from retansmit queue with flag %s\n", flag_str);
+        printf("Remove entry with len %u\n", entry->len);
+        printf("remove, seq=%u\n", entry->seq);
+        debugf("remove, seq=%u, flags=%s, len=%u", entry->seq, flag_str, entry->len);
         memory_free(entry);
     }
     return;
