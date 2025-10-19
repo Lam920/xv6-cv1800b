@@ -15,6 +15,8 @@ struct emmc;
 struct timeval;
 struct tm;
 struct net_device;
+struct socket;
+struct sockaddr;
 
 // bio.c
 void            binit(void);
@@ -293,5 +295,21 @@ time_t          time(time_t*);
 int             gettimeofday(struct timeval*, void*);
 time_t          mktime(struct tm*);
 struct tm*      localtime_r(const time_t*, struct tm*);
+
+// sysfile.c
+int             argfd(int, int*, struct file**);
+int             fdalloc(struct file*);
+
+// net/socket.c
+struct file *   socket_alloc(int, int, int);
+int             socket_close(struct socket*);
+int             socket_bind(struct socket*, struct sockaddr*, int);
+int             socket_recvfrom(struct socket*, char*, int, struct sockaddr*, int*);
+int             socket_sendto(struct socket*, char*, int, struct sockaddr*, int);
+int             socket_connect(struct socket*, struct sockaddr*, int);
+int             socket_listen(struct socket*, int);
+struct file *   socket_accept(struct socket*, struct sockaddr*, int*);
+int             socket_read(struct socket*, char*, int);
+int             socket_write(struct socket*, char*, int);
 
 #endif

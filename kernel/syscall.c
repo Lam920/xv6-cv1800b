@@ -104,6 +104,15 @@ extern uint64 sys_close(void);
 extern uint64 sys_ioctl(void);
 extern uint64 sys_mount(void);
 extern uint64 sys_gettimeofday0(void);
+extern uint64 sys_socket(void);
+extern uint64 sys_bind(void);
+extern uint64 sys_recvfrom(void);
+extern uint64 sys_sendto(void);
+extern uint64 sys_connect(void);
+extern uint64 sys_listen(void);
+extern uint64 sys_accept(void);
+extern uint64 sys_recv(void);
+extern uint64 sys_send(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -132,6 +141,15 @@ static uint64 (*syscalls[])(void) = {
 [SYS_ioctl]   sys_ioctl,
 [SYS_mount]   sys_mount,
 [SYS_gettimeofday0] sys_gettimeofday0,
+[SYS_socket]  sys_socket,
+[SYS_bind]    sys_bind,
+[SYS_recvfrom] sys_recvfrom,
+[SYS_sendto]  sys_sendto,
+[SYS_connect] sys_connect,
+[SYS_listen]  sys_listen,
+[SYS_accept]  sys_accept,
+[SYS_recv]    sys_recv,
+[SYS_send]    sys_send,
 };
 
 void

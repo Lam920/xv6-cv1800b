@@ -47,6 +47,7 @@ OBJS = \
   $K/ext2.o \
   $K/rtc.o \
   $K/time.o \
+  $K/syssocket.o \
   $N/util.o \
   $N/net.o \
   $N/ether.o \
@@ -55,6 +56,7 @@ OBJS = \
   $N/icmp.o \
   $N/udp.o \
   $N/tcp.o \
+  $N/socket.o \
   $P/std.o \
   $K/net.o \
   $K/designware.o
