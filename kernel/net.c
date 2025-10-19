@@ -38,11 +38,13 @@ arp_rx(char *inbuf)
   static int seen_arp = 0;
 
   if(seen_arp){
+#ifdef DYNAMIC_RX_BUFFERS
     kfree(inbuf);
+#endif
     return;
   }
   printf("arp_rx: received an ARP packet\n");
-  seen_arp = 1;
+  // seen_arp = 1;
 
   struct eth *ineth = (struct eth *) inbuf;
   struct arp *inarp = (struct arp *) (ineth + 1);
@@ -70,7 +72,10 @@ arp_rx(char *inbuf)
   arp->tip = inarp->sip;
 
   designware_eth_ops.send(buf, sizeof(*eth) + sizeof(*arp));
+#ifdef DYNAMIC_RX_BUFFERS
   kfree(inbuf);
+#endif
+  kfree(buf);
 }
 
 // Simple IP checksum function
@@ -132,7 +137,9 @@ icmp_rx(char *inbuf, uint32_t src_ip, uint32_t dst_ip)
   
   // Only respond to echo requests
   if (inicmp->type != ICMP_ECHO_REQUEST) {
+#ifdef DYNAMIC_RX_BUFFERS
     kfree(inbuf);
+#endif
     return;
   }
   
@@ -178,7 +185,10 @@ icmp_rx(char *inbuf, uint32_t src_ip, uint32_t dst_ip)
   
   // Send the reply
   designware_eth_ops.send(buf, sizeof(*eth) + sizeof(*ip) + sizeof(*icmp) + icmp_data_len);
+#ifdef DYNAMIC_RX_BUFFERS
   kfree(inbuf);
+#endif
+  kfree(buf);
 }
 
 
@@ -193,7 +203,9 @@ ip_rx(char *inbuf, int len) {
   // Check if packet is for us
   if (inip->ip_dst != htonl(local_ip)) {
     printf("IP packet not for us, dropping\n");
+#ifdef DYNAMIC_RX_BUFFERS
     kfree(inbuf);
+#endif
     return;
   }
   
@@ -202,7 +214,9 @@ ip_rx(char *inbuf, int len) {
     icmp_rx(inbuf, inip->ip_src, inip->ip_dst);
   } else {
     // Handle other protocols (TCP/UDP) later
+#ifdef DYNAMIC_RX_BUFFERS
     kfree(inbuf);
+#endif
   }
 }
 
@@ -219,7 +233,9 @@ net_rx(char *buf, int len)
      ntohs(eth->type) == ETHTYPE_IP){
     ip_rx(buf, len);
   } else {
+#ifdef DYNAMIC_RX_BUFFERS
     kfree(buf);
+#endif
   }
   return 0;
 }

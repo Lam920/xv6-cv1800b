@@ -1192,7 +1192,7 @@ static void rx_descs_init()
 	initlock(&rx_queue.lock, "rx_queue");
 	struct eth_dma_regs *dma_p = priv.dma_regs_p;
 	struct dmamacdescr *desc_table_p = &priv.rx_mac_descrtable[0];
-	char **rxbuffs = priv.rxbuffs;
+	char *rxbuffs = &priv.rxbuffs[0];
 	struct dmamacdescr *desc_p;
 	u32 idx;
 
@@ -1202,13 +1202,19 @@ static void rx_descs_init()
 	 * Otherwise there's a chance to get some of them flushed in RAM when
 	 * GMAC is already pushing data to RAM via DMA. This way incoming from
 	 * GMAC data will be corrupted. */
-	// flush_dcache_range((ulong)rxbuffs, (ulong)rxbuffs + RX_TOTAL_BUFSIZE);
+#ifndef DYNAMIC_RX_BUFFERS
+ 	flush_dcache_range((ulong)rxbuffs, (ulong)rxbuffs + RX_TOTAL_BUFSIZE);
+#endif
 
 	for (idx = 0; idx < CONFIG_RX_DESCR_NUM; idx++) {
 		desc_p = &desc_table_p[idx];
+#ifdef DYNAMIC_RX_BUFFERS
 		rxbuffs[idx] = kalloc();
 		flush_dcache_range((ulong)rxbuffs[idx], (ulong)rxbuffs[idx] + PGSIZE);
 		desc_p->dmamac_addr = (ulong)rxbuffs[idx];
+#else
+		desc_p->dmamac_addr = (ulong)&rxbuffs[idx * CONFIG_ETH_BUFSIZE];
+#endif
 		desc_p->dmamac_next = (ulong)&desc_table_p[idx + 1];
 
 		desc_p->dmamac_cntl =
@@ -1506,7 +1512,9 @@ void eth_intr_rx_packets() {
 
 		printf("[dw] desc_num_check: %d, desc_num: %d\n", desc_num_check, desc_num);
 
+#ifdef DYNAMIC_RX_BUFFERS
 		struct dmamacdescr *desc_p = &priv.rx_mac_descrtable[desc_num];
+#endif
 
 		if (rx_queue.count < RX_QUEUE_SIZE) {
 			/* 
@@ -1525,6 +1533,7 @@ void eth_intr_rx_packets() {
 		for this rx packets later. Old packet point by DMA RX desc 
 		is processing by net_rx. If complete ==> Free old packet
 		*/
+#ifdef DYNAMIC_RX_BUFFERS
 		void *new_buffer = kalloc();
 		if (!new_buffer) {
 			panic("eth_intr_rx_packets: out of memory\n");
@@ -1553,9 +1562,16 @@ void eth_intr_rx_packets() {
 			printf("RX: DMA suspended, resuming\n");
 			writel(1, &dma_p->rxpolldemand);
 		}
-		
+#else
 		// // Free the packet buffer back to DMA
-		// designware_eth_free_pkt(packet, length);
+		designware_eth_free_pkt(packet, length);
+		// Check if RX DMA suspended and resume if needed
+		status = readl(&dma_p->status);
+		if (status & (1 << 7)) {  // RU bit
+			printf("RX: DMA suspended, resuming\n");
+			writel(1, &dma_p->rxpolldemand);
+		}
+#endif
 	}
 	
 	if (received == 0) {
