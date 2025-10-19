@@ -371,16 +371,17 @@ ip_output_device(struct ip_iface *iface, const uint8_t *data, size_t len, ip_add
 {
     uint8_t hwaddr[NET_DEVICE_ADDR_LEN] = {};
     int ret;
-
+    char addr[IP_ADDR_STR_LEN];
+    printf("************* [ip] Enter ip_output_device with iface addr: %s *****************\n", ip_addr_ntop(iface->unicast, addr, sizeof(addr)));
     if (NET_IFACE(iface)->dev->flags & NET_DEVICE_FLAG_NEED_ARP) {
         if (dst == iface->broadcast || dst == IP_ADDR_BROADCAST) {
             memcpy(hwaddr, NET_IFACE(iface)->dev->broadcast, NET_IFACE(iface)->dev->alen);
         } else {
             ret = arp_resolve(NET_IFACE(iface), dst, hwaddr);
+            printf("[net] ret of ARP resolve: %d\n", ret);
             if (ret != ARP_RESOLVE_FOUND) {
                 return ret;
             }
-            return -1;
         }
     }
     return net_device_output(NET_IFACE(iface)->dev, NET_PROTOCOL_TYPE_IP, data, len, hwaddr);
@@ -397,6 +398,7 @@ ip_output_core(struct ip_iface *iface, uint8_t protocol, const uint8_t *data, si
 
     buf = memory_alloc(IP_TOTAL_SIZE_MAX);
     if (!buf) {
+        errorf("memory_alloc() failure");
         return -1;
     }
     hdr = (struct ip_hdr *)buf;
@@ -459,6 +461,7 @@ ip_output(uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_a
         return -1;
     }
     nexthop = (route->nexthop != IP_ADDR_ANY) ? route->nexthop : dst;
+    debugf("[net] --------------next hop: %s ----------------", ip_addr_ntop(nexthop, addr, sizeof(addr)));
     if (NET_IFACE(iface)->dev->mtu < IP_HDR_SIZE_MIN + len) {
         errorf("too long, dev=%s, mtu=%u < %zu",
             NET_IFACE(iface)->dev->name, NET_IFACE(iface)->dev->mtu, IP_HDR_SIZE_MIN + len);

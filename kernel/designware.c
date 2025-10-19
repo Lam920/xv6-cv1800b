@@ -1277,7 +1277,7 @@ int designware_eth_start(void)
 static int _dw_eth_send(struct dw_eth_dev *priv, void *packet, int length)
 {
 	struct eth_dma_regs *dma_p = priv->dma_regs_p;
-
+	printf("[dw] Enter _dw_eth_send with length: %d\n", length);
 	acquire(&priv->lock);
 
 	u32 desc_num = priv->tx_currdescnum;
@@ -1632,6 +1632,7 @@ static ssize_t eth_net_write(struct net_device *dev, const uint8_t *data, size_t
 static int
 eth_net_transmit(struct net_device *dev, uint16_t type, const uint8_t *packet, size_t len, const void *dst)
 {
+	printf("%s: Transmit packet of length %u bytes\n", __func__, len);
   return ether_transmit_helper(dev, type, packet, len, dst, eth_net_write);;
 }
 
