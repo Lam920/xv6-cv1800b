@@ -281,6 +281,7 @@ int             net_rx(char *buf, int len);
 // net/net.c
 void            netinit(void);
 void            netrun(void);
+int             net_timer_handler(void);
 int             net_softirq_handler(void);
 int             net_event_handler(void);
 

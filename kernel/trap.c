@@ -177,6 +177,7 @@ clockintr()
   ticks++;
   wakeup(&ticks);
   release(&tickslock);
+  net_timer_handler();
 }
 
 void
