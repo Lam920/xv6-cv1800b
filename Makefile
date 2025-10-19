@@ -50,6 +50,7 @@ OBJS = \
   $N/util.o \
   $N/net.o \
   $N/ether.o \
+  $N/ip.o \
   $P/std.o \
   $K/net.o \
   $K/designware.o

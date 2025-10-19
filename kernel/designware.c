@@ -23,6 +23,7 @@
 #include "include/ethtool.h"
 #include "kernel/net/net.h"
 #include "bitops.h"
+#include "kernel/net/ip.h"
 
 static struct spinlock rx_lock;
 
@@ -1697,4 +1698,16 @@ void eth_init(void)
 	priv.dev = dev;
 	printf("Ethernet network device registered\n");
 	debugf("initialized, addr=%s", ether_addr_ntop(dev->addr, mac, sizeof(mac)));
+	
+	// TODO: Temporary Code
+    struct ip_iface *iface;
+    iface = ip_iface_alloc("192.168.1.72", "255.255.255.0");
+    if (!iface) {
+        errorf("ip_iface_alloc() failure");
+        return;
+    }
+    if (ip_iface_register(dev, iface) == -1) {
+        errorf("ip_iface_register() failure");
+        return;
+    }
 }

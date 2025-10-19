@@ -77,6 +77,33 @@ intr_shutdown(void)
     return;
 }
 
+/*
+* Mutex implementation
+*/
+typedef struct spinlock mutex_t;
+
+#define MUTEX_INITIALIZER {0}
+
+static inline int
+mutex_init(mutex_t *mutex)
+{
+    initlock(mutex, "");
+    return 0;
+}
+
+static inline int
+mutex_lock(mutex_t *mutex)
+{
+    acquire(mutex);
+    return 0;
+}
+
+static inline int
+mutex_unlock(mutex_t *mutex)
+{
+    release(mutex);
+    return 0;
+}
 
 /*
  * Scheduler

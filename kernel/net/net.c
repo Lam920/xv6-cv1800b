@@ -2,6 +2,7 @@
 
 #include "util.h"
 #include "net.h"
+#include "ip.h"
 #include "kernel/net/platform/xv6-riscv/platform.h"
 
 struct net_protocol {
@@ -335,6 +336,10 @@ net_init(void)
 {
     if (intr_init() == -1) {
         errorf("intr_init() failure");
+        return -1;
+    }
+    if (ip_init() == -1) {
+        errorf("ip_init() failure");
         return -1;
     }
     infof("initialized");
