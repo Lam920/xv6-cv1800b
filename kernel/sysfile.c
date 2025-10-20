@@ -16,6 +16,7 @@
 #include "file.h"
 #include "fcntl.h"
 #include "include/vfs.h"
+#include "net/socket.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -612,5 +613,32 @@ sys_ioctl(void)
   if (argfd(0, 0, &f) < 0)
     return -1;
 
-  return fileioctl(f, req, p);
+  if (f->type != FD_SOCKET) {
+    return fileioctl(f, req, p);
+  }
+  else {
+    int ret;
+    int req2;
+    uint64 ifr_p;
+    struct ifreq ifr;
+    struct proc *p = myproc();
+    argint(1, &req2);
+    if (req2 & IOC_IN) {
+      argaddr(2, &ifr_p);
+      if (!ifr_p) {
+        return -1;
+      }
+      if (copyin(p->pagetable, (char *)&ifr, ifr_p, sizeof(ifr)) < 0) {
+        return -1;
+      }
+    }
+    ret = socket_ioctl(f->socket, req2, &ifr);
+    if (req2 & IOC_OUT) {
+      if (copyout(p->pagetable, ifr_p, (char *)&ifr, sizeof(ifr)) < 0) {
+        return -1;
+      }
+    }
+    return (uint64)ret;
+  }
+  return -1;
 }
