@@ -284,7 +284,7 @@ tcp_output_segment(uint32_t seq, uint32_t ack, uint8_t flg, uint16_t wnd, uint8_
         ip_endpoint_ntop(foreign, ep2, sizeof(ep2)),
         total, len);
     tcp_dump((uint8_t *)hdr, total);
-    printf("[net] now to TCP output\n");
+    // printf("[net] now to TCP output\n");
 
     __sync_synchronize();  // Memory barrier
     
@@ -294,7 +294,7 @@ tcp_output_segment(uint32_t seq, uint32_t ack, uint8_t flg, uint16_t wnd, uint8_
         return -1;
     }  
 
-    printf("tcp_output_segment complete\n");
+    // printf("tcp_output_segment complete\n");
     memory_free(buf);
     return len;
 }

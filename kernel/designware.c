@@ -950,7 +950,7 @@ int genphy_startup(struct phy_device *phydev)
 {
 	int ret;
 	printf("[dw] do genphy_startup, now genphy_update_link\n");
-	delayms(5000);
+	// delayms(5000);
 	ret = genphy_update_link(phydev);
 	if (ret)
 		return ret;
