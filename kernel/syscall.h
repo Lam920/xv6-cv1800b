@@ -36,3 +36,6 @@
 #define SYS_accept 32
 #define SYS_recv   33
 #define SYS_send   34
+
+#define SYS_mmap   35
+#define SYS_munmap 36

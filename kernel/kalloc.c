@@ -9,6 +9,11 @@
 #include "riscv.h"
 #include "defs.h"
 
+struct spinlock cowlock;
+/* Btw, I get this number by print all page in range of KEREL end -> MAX VA :))*/
+int pgcount_arr[32768] = {0};
+
+
 void freerange(void *pa_start, void *pa_end);
 
 extern char _end[]; // first address after kernel.
@@ -27,6 +32,7 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&cowlock, "cow");
   freerange(_end, (void*)PHYSTOP);
 }
 
@@ -47,11 +53,20 @@ void
 kfree(void *pa)
 {
   struct run *r;
+  int cur_pgcnt;
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < _end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
+  acquire(&cowlock);
+  pgcount_arr[PAGECOUNT_IDX((uint64)pa)] -= 1;
+  release(&cowlock);
+  cur_pgcnt = pgcount_arr[PAGECOUNT_IDX((uint64)pa)];
+  if (cur_pgcnt > 0) {
+    return;
+  }
+
   memset(pa, 1, PGSIZE);
 
   r = (struct run*)pa;
@@ -78,5 +93,15 @@ kalloc(void)
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
+  
+#ifdef LAB_COW
+  /* [cow] first alloc, page reference count is 1 */
+  if (r) {
+    acquire(&cowlock);
+    pgcount_arr[PAGECOUNT_IDX((uint64)r)] = 1;
+    release(&cowlock);
+  }
+#endif
+
   return (void*)r;
 }

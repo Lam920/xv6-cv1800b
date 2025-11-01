@@ -11,6 +11,12 @@
 #include "emmc.h"
 #include "include/designware.h"
 
+#include "spinlock.h"
+#include "sleeplock.h"
+#include "proc.h"
+#include "fcntl.h"
+#include "file.h"
+
 /*
  * the kernel's page table.
  */
@@ -356,7 +362,9 @@ freewalk(pagetable_t pagetable)
       freewalk((pagetable_t)child);
       pagetable[i] = 0;
     } else if(pte & PTE_V){
+#ifndef LAB_MMAP
       panic("freewalk: leaf");
+#endif
     }
   }
   kfree((void*)pagetable);
@@ -384,15 +392,35 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint64 flags;
+#ifndef LAB_COW
   char *mem;
+#endif
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+#ifdef LAB_COW
+    /* [cow] also mark parent PTE as readonly*/
+    // if (1) { cause error ??????? illegal instruction
+    if (*pte & PTE_W) {
+      *pte = (*pte) & (~PTE_W);
+      *pte = (*pte) | PTE_COW;
+    }
     pa = PTE2PA(*pte);
+    /* [cow] copy all pte flags from parent to child */
     flags = PTE_FLAGS(*pte);
+    /* [cow] map new child process pagetable pa memory same as parent */
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      goto err;
+    }
+    acquire(&cowlock);
+    pgcount_arr[PAGECOUNT_IDX((uint64)pa)] += 1;
+    release(&cowlock);
+#endif
+
+#ifndef LAB_COW
     if((mem = kalloc()) == 0)
       goto err;
     memmove(mem, (char*)pa, PGSIZE);
@@ -400,6 +428,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       kfree(mem);
       goto err;
     }
+#endif
   }
   // Synchronize the instruction and data streams,
   // since we may copy pages with instructions.
@@ -431,15 +460,35 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
+  pte_t *pte;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
+    if(va0 >= MAXVA)
       return -1;
+    pte = walk(pagetable, va0, 0);
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
+      ((*pte & PTE_W) == 0 && (*pte & PTE_COW) == 0)) 
+      return -1;
+    pa0 = PTE2PA(*pte);
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
+    if (*pte & PTE_COW) {
+      char *mem;
+      if((mem = kalloc()) == 0) {
+        panic("Failed to allocate physical page for COW\n");
+      }
+      /* Rewrite child pte with new PA and new permission */
+      /* First copy original mapping page to newly allocated page */
+      memmove(mem, (char*)pa0, PGSIZE);
+      *pte = PA2PTE(mem) | PTE_FLAGS(*pte) | PTE_W;
+      *pte = *pte & (~PTE_COW);
+      memmove((void *)((uint64)mem + (dstva - va0)), src, n);
+      /* Free COW mapping page (decrease reference) */
+      kfree((void *)pa0);
+      pa0 = (uint64)mem;
+    }
     memmove((void *)(pa0 + (dstva - va0)), src, n);
 
     len -= n;
@@ -515,4 +564,209 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+
+uint64 sys_mmap(void) {
+  /*
+find an unused region in the process's address space 
+in which to map the file, and add a VMA to the process's table
+of mapped regions. 
+*/
+// rounddown addr
+// find unused region
+// the dump solution is loop each of them find the invalid one
+// set the content
+// In page fault, manually check memory region for each.
+
+  uint64 addr;
+  int size, prot, flags, fd, offset;
+
+  argaddr(0, &addr);
+  argint(1, &size);
+  argint(2, &prot);
+  argint(3, &flags);
+  argint(4, &fd);
+  argint(5, &offset);
+  
+  struct proc *p = myproc();
+
+  printf("process pagetable: %p\n", p->pagetable);
+  struct file *f = p->ofile[fd];
+  // check that mmap doesn't allow read/write mapping of a
+  // file opened read-only.
+  if (flags & MAP_SHARED) {
+    if (!(f->writable) && (prot & PROT_WRITE)) {
+      printf("File is read-only, but we mmap with write permission and flag. %d vs %d\n",
+            f->writable, prot);
+      return 0xffffffffffffffff;
+    }
+  }
+
+  uint64 cur_max = p->cur_max;
+#ifdef DEBUG_MMAP
+  printf("addr(%p), size(%d), prot(%d), flags(%d), fd(%d), offset(%d). Current Max(%p). MAXVA(%p)\n",
+         (uint64 *)addr, size, prot, flags, fd, offset, (uint64 *)cur_max, (uint64 *)MAXVA);
+#endif
+  /* mmap: Start address for kernel to found VM to allocate for mmap */       
+  uint64 start_addr = PGROUNDDOWN(cur_max - size);
+
+  // find an unused vma
+  struct vm_area_struct *vm = 0;
+  for (int i=0; i<100; i++) {
+    if (p->vma[i].valid == 0) {
+      vm = &p->vma[i];
+      break;
+    }
+  }
+  if (vm) {
+    vm->valid = 1;
+    vm->start_ad = start_addr;
+    vm->orig_start_ad = start_addr;  // Save original start for file offset calc
+    vm->end_ad = cur_max;
+    vm->len = size;
+    vm->prot = prot;
+    vm->flags = flags;
+    vm->fd = fd;
+    vm->file = p->ofile[fd];
+    vm->file->ref++;
+
+    // update cur_max: reset process current max available
+    p->cur_max = start_addr;
+
+#ifdef DEBUG_MMAP
+    printf("mmap is set. max va(%p). VMA start(%p), end(%p). Inode(%d)\n", 
+            (uint64 *)MAXVA, (uint64 *)vm->start_ad, (uint64 *)vm->end_ad, vm->file->ip->inum);
+#endif
+  } else {
+    return 0xffffffffffffffff;
+  }
+
+  return start_addr;
+}
+uint64 sys_munmap(void) {
+  uint64 addr;
+  int size;
+
+  argaddr(0, &addr);
+  argint(1, &size);
+  
+  uint64 start_base = PGROUNDDOWN(addr);
+  uint64 end_base = start_base + size;  // Fixed: should be start + size, not PGROUNDDOWN
+  
+  struct proc *p = myproc();
+  struct vm_area_struct *vm = 0;
+  for (int i=0; i<MMAP_PAGES; i++) {
+    if (p->vma[i].valid == 1 && 
+        p->vma[i].start_ad <=  start_base &&
+        end_base <= p->vma[i].end_ad) {
+      vm = &p->vma[i];
+      break;
+    }
+  }
+  if (!vm) {
+    printf("Cannot found VMA. start base(%p), end base(%p)\n",
+          (uint64 *)start_base, (uint64 *)end_base);
+    return -1;
+  }
+  
+  printf("munmap: addr=%p size=%d -> start_base=%p end_base=%p. VMA: start=%p end=%p\n",
+         (uint64 *)addr, size, (uint64 *)start_base, (uint64 *)end_base,
+         (uint64 *)vm->start_ad, (uint64 *)vm->end_ad);
+
+  if (vm->flags & MAP_SHARED) {
+    printf("....We need to write back file\n");
+    struct file *f = vm->file;
+    begin_op();
+    f->ip->iops->ilock(f->ip);
+    
+    // Write back only the unmapped region, respecting file size
+    // Calculate the offset in the file for this unmapped region
+    // Use orig_start_ad (original start) not current start_ad (which may have been modified)
+    uint64 file_offset = start_base - vm->orig_start_ad;
+    uint64 write_size = end_base - start_base;
+    
+    // Don't write beyond the original file size
+    if (file_offset < f->ip->size) {
+      if (file_offset + write_size > f->ip->size) {
+        write_size = f->ip->size - file_offset;
+      }
+      printf("Writing back: offset=%ld, size=%ld, file_size=%d\n", 
+             file_offset, write_size, f->ip->size);
+      f->ip->iops->writei(f->ip, 1, start_base, file_offset, write_size);
+    }
+    
+    f->ip->iops->iunlock(f->ip);
+    end_op();
+  }
+
+  // Unmap the pages from the page table
+  pte_t *pte;
+  for(uint64 i = start_base; i < end_base; i += PGSIZE){
+    printf("munmap: unmap va %p\n", (uint64 *)i);
+    if((pte = walk(p->pagetable, i, 0)) != 0) {  // Check if PTE exists
+      if(*pte & PTE_V) {                          // Check if it's valid
+        uvmunmap(p->pagetable, i, 1, 1);          // Unmap and free the page
+      }
+    }
+  }
+
+  // 4 cases
+  // first part is un-map
+  if (vm->start_ad == start_base && end_base < vm->end_ad) {
+    vm->start_ad = end_base;
+    vm->len -= size;
+  } else if (vm->start_ad < start_base && end_base == vm->end_ad){
+    // last part is un-map
+    vm->end_ad = start_base;  // Fixed: should be start_base, not start_base - 1
+    vm->len -= size;           // Fixed: should be -= not =
+  } else if (vm->start_ad == start_base && vm->end_ad == end_base) {
+    // exact size
+    vm->file->ref--;
+    //vm->file->off = 0;
+    vm->valid = 0;
+    vm->len = 0;
+  } else if (vm->start_ad < start_base && end_base < vm->end_ad) {
+    printf("this is very tricky...need to fix offset\n");
+  } else {
+    printf("Err. start base(%p), end base(%p). vm start(%p), vm end(%p)\n",
+         (uint64 *)start_base, (uint64 *)end_base, (uint64 *)vm->start_ad, (uint64 *)vm->end_ad);
+  }
+  return size;
+}
+
+int mmap_read(struct file *f, char *pa, int off, int size) {
+  f->ip->iops->ilock(f->ip);
+  // read to kernel/physical address directly
+  printf("mmap_read: read file inum(%d) at off(%d) to pa(%p) with size(%d)\n",
+         f->ip->inum, off, (uint64 *)pa, size);
+  int n = f->ip->iops->readi(f->ip, 0, (uint64)pa, off, size);
+  printf("mmap_read: successfully read %d bytes\n", n);
+  f->ip->iops->iunlock(f->ip);
+  return n;
+} 
+
+void free_all_vma(pagetable_t pagetable, uint64 start, uint64 end) {
+  pte_t *pte;
+  for(int i = start; i <= end; i+=PGSIZE) {
+    if((pte = walk(pagetable, i, 0)) == 0) {
+      if(*pte & PTE_V) {
+        uvmunmap(pagetable, i, PGSIZE, 0);
+      }
+    }
+  }
+}
+
+void copy_vma(struct vm_area_struct *dst, struct vm_area_struct *src) {
+  dst->valid = 1;
+  dst->start_ad = src->start_ad;
+  dst->orig_start_ad = src->orig_start_ad;  // Copy original start address
+  dst->end_ad = src->end_ad;
+  dst->len = src->len;
+  dst->prot = src->prot;
+  dst->flags = src->flags;
+  dst->fd = src->fd;
+  dst->file = src->file;
+  // Note: Don't increment ref here - caller (fork) will set dst->file
+  // to the filedup'd version from np->ofile[dst->fd]
 }

@@ -2,6 +2,18 @@
 #define INC_DEFS_H
 #include "riscv.h"
 #include <stdarg.h>
+
+#ifdef LAB_MMAP
+typedef unsigned long size_t;
+typedef long int off_t;
+#endif
+#define LAB_COW 1
+#ifndef LAB_MMAP
+#define LAB_MMAP 1
+#endif
+#include "memlayout.h"
+
+
 struct buf;
 struct context;
 struct file;
@@ -18,6 +30,7 @@ struct tm;
 struct net_device;
 struct socket;
 struct sockaddr;
+struct vm_area_struct;
 
 // bio.c
 void            binit(void);
@@ -133,6 +146,9 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+// mmap
+int             mmap_read(struct file *f, char *pa, int off, int size);
+
 void            kdelay(unsigned long n);
 
 void            delayms(unsigned long n);
@@ -186,6 +202,10 @@ void            argaddr(int, uint64 *);
 int             fetchstr(uint64, char*, int);
 int             fetchaddr(uint64, uint64*);
 void            syscall();
+
+void            free_all_vma(pagetable_t, uint64, uint64);
+void            copy_vma(struct vm_area_struct *, struct vm_area_struct *);
+
 
 // trap.c
 extern uint     ticks;
@@ -315,5 +335,11 @@ struct file *   socket_accept(struct socket*, struct sockaddr*, int*);
 int             socket_read(struct socket*, char*, int);
 int             socket_write(struct socket*, char*, int);
 int             socket_ioctl(struct socket*, int, void*);
+
+#ifdef LAB_COW
+extern struct spinlock cowlock;
+extern int handle_pagefault(int s_cause);
+extern int pgcount_arr[32768];
+#endif
 
 #endif

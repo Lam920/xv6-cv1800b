@@ -72,4 +72,10 @@ int inet_pton(int, const char*, void*);
 // strtoul.c
 unsigned long strtoul(const char *nptr, char **endptr, int base);
 
+
+#ifdef LAB_MMAP
+void *mmap(void *addr, int length, int prot, int flags, int fd, int offset);
+int munmap(void *addr, int length);
+#endif
+
 #endif

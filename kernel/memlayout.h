@@ -138,4 +138,12 @@
  */
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
 
+
+/* [cow] Define total page number for reference in cow */
+#ifndef __ASSEMBLER__
+extern char _end[];
+#endif
+#define TOTAL_PGNUM ((PHYSTOP - (uint64)_end)/PGSIZE)
+#define PAGECOUNT_IDX(pa) (((uint64)pa - (uint64)_end)/PGSIZE)
+
 #endif

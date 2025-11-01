@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 #include "softirq.h"
+#include "fcntl.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -19,6 +20,11 @@ extern char trampoline[], uservec[], userret[];
 void kernelvec();
 
 extern int devintr();
+
+
+static const char *scause_desc(uint64 stval);
+
+static int check_mmap_vma(uint64 va, struct vm_area_struct *vma);
 
 void
 trapinit(void)
@@ -70,16 +76,19 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } else if(r_scause() == 13 || r_scause() == 15){
+    printf("usertrap(): mmap page fault %lx (%s) pid=%d\n", r_scause(), scause_desc(r_scause()), p->pid);
+    handle_pagefault(r_scause());
+  }else if(r_scause() == 2){
+    printf("illegal instruction at: %p of pid: %d with name: %s\n", (uint64 *)myproc()->trapframe->epc, myproc()->pid, myproc()->name);
+    printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+    printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
+    panic("Handle illegal\n");
+  }else if((which_dev = devintr()) != 0){
     // ok
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    if(r_scause() == 0xd) {  // Load page fault
-      pte_t *pte = walk(p->pagetable, r_stval(), 0);
-      printf("         pagetable walk: pte=%p (valid=%d)\n", 
-            pte, pte ? (*pte & PTE_V) : 0);
-    }
+    printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+    printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
     setkilled(p);
   }
 
@@ -92,6 +101,84 @@ usertrap(void)
 
   usertrapret();
 }
+
+
+
+
+static int handle_mmap_pagefault(uint64 va, int vma_idx, struct vm_area_struct *vm, int s_cause);
+
+/* Handling page fault exception*/
+#ifdef LAB_COW
+int handle_pagefault(int s_cause) 
+{
+  /* [cow] get virtual address that caused page fault when write */
+  uint64 va = r_stval();
+  uint64 pa;
+  struct proc *p = myproc();
+  pte_t *pte;
+  char *mem;
+  if (va >= MAXVA) 
+  {
+    setkilled(p);
+    return -1;
+  }
+
+  struct vm_area_struct vm;
+  int vma_idx = check_mmap_vma(va, &vm);
+
+  if (vma_idx >= 0) {
+    handle_mmap_pagefault(va, vma_idx, &vm, s_cause);
+    return 0;
+  }
+  
+  if (s_cause == 13) {
+    printf("pagefault: not in mmap region\n");
+    setkilled(p);
+    return -1;
+  }
+  /* [cow] at first, va must be aligned to PAGETABLE for not panic */
+  // printf("***Before va: %p of pid: %d with name: %s****\n", (uint64 *)va, p->pid, p->name);
+  va = PGROUNDDOWN(va);
+  if((pte = walk(p->pagetable, va, 0)) == 0)
+  {
+    printf("pagefault: pte should exist\n");
+    setkilled(p);
+    return -1;
+  }
+  if((*pte & PTE_V) == 0)
+  {
+    printf("pagefault: page not present\n");
+    setkilled(p);
+  }
+  /* [cow] get old mapping memory between child and parent.
+  Now child want to write to this memory, so we need to copy to child
+  and add perm */
+  pa = PTE2PA(*pte);
+  // [cow] copy all pte flags from parent to child
+  // printf("pte flags: %p\n", (uint64 *)PTE_FLAGS(*pte));
+  if ((*pte & PTE_COW) == 0) {
+    printf("Real pagefault\n");
+    setkilled(p);
+    return -1;
+  }
+  if((mem = kalloc()) == 0)
+      goto err;
+  memmove(mem, (char*)pa, PGSIZE);
+  /* [cow] Update pte to newly allocated physical memory */
+  if (PTE_FLAGS(*pte) & PTE_COW) {
+    *pte = PA2PTE(mem) | PTE_FLAGS(*pte) | PTE_W;
+    *pte = *pte & (~PTE_COW);
+  }
+  /* [cow] Decrease ref count to pagetable*/
+  kfree((void *)pa);
+  return 0;
+err:
+  uvmunmap(p->pagetable, 0, va / PGSIZE, 1);
+  printf("Handle pagefault error\n");
+  return -1;
+}
+#endif
+
 
 //
 // return to user space
@@ -275,5 +362,141 @@ devintr()
   } else {
     return 0;
   }
+}
+
+
+static const char *
+scause_desc(uint64 stval)
+{
+  static const char *intr_desc[16] = {
+    [0] "user software interrupt",
+    [1] "supervisor software interrupt",
+    [2] "<reserved for future standard use>",
+    [3] "<reserved for future standard use>",
+    [4] "user timer interrupt",
+    [5] "supervisor timer interrupt",
+    [6] "<reserved for future standard use>",
+    [7] "<reserved for future standard use>",
+    [8] "user external interrupt",
+    [9] "supervisor external interrupt",
+    [10] "<reserved for future standard use>",
+    [11] "<reserved for future standard use>",
+    [12] "<reserved for future standard use>",
+    [13] "<reserved for future standard use>",
+    [14] "<reserved for future standard use>",
+    [15] "<reserved for future standard use>",
+  };
+  static const char *nointr_desc[16] = {
+    [0] "instruction address misaligned",
+    [1] "instruction access fault",
+    [2] "illegal instruction",
+    [3] "breakpoint",
+    [4] "load address misaligned",
+    [5] "load access fault",
+    [6] "store/AMO address misaligned",
+    [7] "store/AMO access fault",
+    [8] "environment call from U-mode",
+    [9] "environment call from S-mode",
+    [10] "<reserved for future standard use>",
+    [11] "<reserved for future standard use>",
+    [12] "instruction page fault",
+    [13] "load page fault",
+    [14] "<reserved for future standard use>",
+    [15] "store/AMO page fault",
+  };
+  uint64 interrupt = stval & 0x8000000000000000L;
+  uint64 code = stval & ~0x8000000000000000L;
+  if (interrupt) {
+    if (code < NELEM(intr_desc)) {
+      return intr_desc[code];
+    } else {
+      return "<reserved for platform use>";
+    }
+  } else {
+    if (code < NELEM(nointr_desc)) {
+      return nointr_desc[code];
+    } else if (code <= 23) {
+      return "<reserved for future standard use>";
+    } else if (code <= 31) {
+      return "<reserved for custom use>";
+    } else if (code <= 47) {
+      return "<reserved for future standard use>";
+    } else if (code <= 63) {
+      return "<reserved for custom use>";
+    } else {
+      return "<reserved for future standard use>";
+    }
+  }
+}
+
+static int check_mmap_vma(uint64 va, struct vm_area_struct *vm) {
+  struct proc *p = myproc();
+  for (int i=0; i<100; i++) {
+    if (p->vma[i].valid == 1) {
+      if (va >= p->vma[i].start_ad && va < p->vma[i].end_ad) {
+        *vm = p->vma[i];
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
+static int handle_mmap_pagefault(uint64 va, int vma_idx, struct vm_area_struct *vm, int s_cause) {
+  struct proc *p = myproc();
+  // allocate a page of physical memory.
+  if (!vm) {
+    printf("VM addr is not lived in VMA, error out.\n");
+    p->killed = 1;
+    return -1;
+  }
+  
+  // Check for write to read-only mapping
+  if (s_cause == 15) {  // Store/AMO page fault (write attempt)
+    if ((vm->prot & PROT_WRITE) == 0) {  // But VMA is read-only
+      printf("mmap: write to read-only mapping\n");
+      p->killed = 1;
+      return -1;
+    }
+  }
+  
+  uint64 fault_addr_head = PGROUNDDOWN(va);
+  pte_t *pte;
+  
+  // Check if page is already mapped (might happen in fork scenarios)
+  if((pte = walk(p->pagetable, fault_addr_head, 0)) != 0 && (*pte & PTE_V)) {
+    printf("Mmap page already mapped at %lx\n", fault_addr_head);
+    return 0;
+  }
+  
+  char *pa = kalloc();
+  if(pa == 0)
+    panic("kalloc");
+  memset(pa, 0, PGSIZE);
+
+  printf("Mmap page fault at addr: %lx and addr_head: %lx, allocate start_ad: %lx\n", va, fault_addr_head, vm->start_ad);
+  
+  // read 4096 bytes of the relevant file into physical memory BEFORE mapping.
+  // IMPORTANT: the read offset is the distance between page_fault_addr
+  // and VMA->start.
+  int distance = fault_addr_head - vm->start_ad;
+  mmap_read(vm->file, pa, distance, PGSIZE);
+
+  // Now map the page with the file content into user space
+  if (mappages(p->pagetable, fault_addr_head, PGSIZE, (uint64)pa, vm->prot | PTE_U) != 0) {
+    kfree(pa);
+    p->killed = 1;
+    return -1;
+  }
+
+  // Check content using physical address (pa), not user virtual address
+  char *t = (char *)pa;
+  if (t[0] != 'A') {
+    printf("mismatch!!!! wanted 'A', got %x\n", t[0]);
+  }
+
+  printf("Trap addr base(%lx). VMA start(%lx), end(%lx) with distance: %x.\n", 
+        fault_addr_head, vm->start_ad, vm->end_ad, distance);
+  return 0;
 }
 

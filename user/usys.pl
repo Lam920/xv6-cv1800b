@@ -48,3 +48,5 @@ entry("listen");
 entry("accept");
 entry("recv");
 entry("send");
+entry("mmap");
+entry("munmap");

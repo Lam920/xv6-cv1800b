@@ -148,6 +148,12 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  /*
+  mmap: Init start address to find vma to allocate ~ cur_max
+  */
+  memset(&p->vma, 0, sizeof p->vma);
+  p->cur_max = (TRAMPOLINE - 10 * PGSIZE);
+
   return p;
 }
 
@@ -314,6 +320,30 @@ fork(void)
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
 
+  // copy VMA areas
+  for (int i=0; i<MMAP_PAGES; i++) {
+    if (p->vma[i].valid == 1) {
+      struct vm_area_struct *src = 0;
+      src = &p->vma[i];
+      // find one available from child.
+      struct vm_area_struct *dst = 0;
+      for (int j=0; j<MMAP_PAGES; j++) {
+        if (np->vma[j].valid == 0) {
+          dst = &np->vma[j];
+          break;
+        }
+      }
+      if (dst) {
+        copy_vma(dst, src);
+        // VMA keeps its own file reference - increment ref count for child
+        dst->file = src->file;
+        filedup(src->file);
+        printf("copy VMA to child. start %p. end %p. From %p, %p\n",
+               (uint64 *)dst->start_ad, (uint64 *)dst->end_ad, (uint64 *)src->start_ad, (uint64 *)src->end_ad);
+      }
+    }
+  }
+
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
@@ -364,6 +394,18 @@ exit(int status)
       fileclose(f);
       p->ofile[fd] = 0;
     }
+  }
+
+
+  // free all VMA areas
+  struct vm_area_struct *vm = 0;
+  for (int i=0; i<MMAP_PAGES; i++) {
+    if (p->vma[i].valid == 0) {
+      continue;
+    }
+    vm = &p->vma[i];
+    vm->valid = 0;
+    free_all_vma(p->pagetable, vm->start_ad,vm->end_ad);
   }
 
   begin_op();
