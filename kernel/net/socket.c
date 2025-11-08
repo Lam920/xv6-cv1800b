@@ -1,5 +1,6 @@
 #include "platform.h"
 
+#include "util.h"  
 #include "fs.h"
 #include "sleeplock.h"
 #include "file.h"
@@ -324,6 +325,12 @@ socket_ioctl(struct socket *s, int req, void *arg)
             }
             if (ip_iface_reconfigure(iface, iface->unicast, ((struct sockaddr_in *)&ifreq->ifr_addr)->sin_addr.s_addr) == -1) {
                 return -1;
+            }
+            // Hardcoded default gateway - change this to match your network!
+            // TODO: Replace "10.0.0.1" with your actual gateway IP
+            if (ip_route_set_default_gateway(iface, "192.168.1.59") == -1) {
+                errorf("failed to set default gateway");
+                // Don't return error, just log it
             }
             break;
         default:
