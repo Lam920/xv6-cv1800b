@@ -97,6 +97,7 @@ struct vm_area_struct {
   int len;
   int prot;
   int flags;
+  int forked;            // Set to 1 if VMA was inherited from fork
   struct file *file;
   int fd;
 };

@@ -16,6 +16,7 @@
 #include "proc.h"
 #include "fcntl.h"
 #include "file.h"
+#include "include/cache.h"  
 
 /*
  * the kernel's page table.
@@ -461,34 +462,45 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
   pte_t *pte;
+  struct proc *p = myproc();
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    if(va0 >= MAXVA)
+    if(va0 >= MAXVA) {
       return -1;
+    }
     pte = walk(pagetable, va0, 0);
-    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
-      ((*pte & PTE_W) == 0 && (*pte & PTE_COW) == 0)) 
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0) {
       return -1;
-    pa0 = PTE2PA(*pte);
-    n = PGSIZE - (dstva - va0);
-    if(n > len)
-      n = len;
+    }
+    // Handle COW pages
     if (*pte & PTE_COW) {
       char *mem;
       if((mem = kalloc()) == 0) {
         panic("Failed to allocate physical page for COW\n");
       }
-      /* Rewrite child pte with new PA and new permission */
+      pa0 = PTE2PA(*pte);
       /* First copy original mapping page to newly allocated page */
       memmove(mem, (char*)pa0, PGSIZE);
+      /* Update PTE: set to new physical address, make writable, clear COW flag */
       *pte = PA2PTE(mem) | PTE_FLAGS(*pte) | PTE_W;
       *pte = *pte & (~PTE_COW);
-      memmove((void *)((uint64)mem + (dstva - va0)), src, n);
       /* Free COW mapping page (decrease reference) */
       kfree((void *)pa0);
       pa0 = (uint64)mem;
+    } else {
+      // Regular page - must be writable
+      if((*pte & PTE_W) == 0) {
+        printf("copyout: FAIL - not writable, pid=%d, dstva=%p, PTE=%p (COW=%d, W=%d)\n",
+               p->pid, dstva, *pte, (*pte & PTE_COW) != 0, (*pte & PTE_W) != 0);
+        return -1;
+      }
+      pa0 = PTE2PA(*pte);
     }
+    
+    n = PGSIZE - (dstva - va0);
+    if(n > len)
+      n = len;
     memmove((void *)(pa0 + (dstva - va0)), src, n);
 
     len -= n;
@@ -627,6 +639,7 @@ of mapped regions.
     vm->len = size;
     vm->prot = prot;
     vm->flags = flags;
+    vm->forked = 0;  // This is an original mmap, not inherited from fork
     vm->fd = fd;
     vm->file = p->ofile[fd];
     vm->file->ref++;
@@ -676,28 +689,72 @@ uint64 sys_munmap(void) {
 
   if (vm->flags & MAP_SHARED) {
     printf("....We need to write back file\n");
-    struct file *f = vm->file;
-    begin_op();
-    f->ip->iops->ilock(f->ip);
     
-    // Write back only the unmapped region, respecting file size
-    // Calculate the offset in the file for this unmapped region
-    // Use orig_start_ad (original start) not current start_ad (which may have been modified)
-    uint64 file_offset = start_base - vm->orig_start_ad;
-    uint64 write_size = end_base - start_base;
-    
-    // Don't write beyond the original file size
-    if (file_offset < f->ip->size) {
-      if (file_offset + write_size > f->ip->size) {
-        write_size = f->ip->size - file_offset;
+    // Skip writeback for forked VMAs - they shouldn't modify the shared file
+    // because their pages are either COW copies or newly allocated after fork
+    if (vm->forked) {
+#ifdef DEBUG_MMAP
+      printf("....VMA was forked, skipping writeback to preserve file integrity\n");
+#endif
+    } else {
+      struct file *f = vm->file;
+      
+      // Check if any pages are COW - if so, skip writeback for those pages
+      // because COW pages are private copies that shouldn't affect the shared file
+      pte_t *pte;
+      int has_non_cow_pages = 0;
+      
+      for(uint64 i = start_base; i < end_base; i += PGSIZE) {
+        if((pte = walk(p->pagetable, i, 0)) != 0 && (*pte & PTE_V)) {
+          if (!(*pte & PTE_COW)) {
+            has_non_cow_pages = 1;
+            // Flush cache for non-COW pages that will be written back
+            uint64 pa = PTE2PA(*pte);
+            flush_dcache_range(pa, pa + PGSIZE);
+          }
+        }
       }
-      printf("Writing back: offset=%ld, size=%ld, file_size=%d\n", 
-             file_offset, write_size, f->ip->size);
-      f->ip->iops->writei(f->ip, 1, start_base, file_offset, write_size);
+      
+      // Only write back if we have non-COW pages
+      if (has_non_cow_pages) {
+        begin_op();
+        f->ip->iops->ilock(f->ip);
+#ifdef DEBUG_MMAP   
+        printf("Writeback: inode=%d, current size=%d\n", f->ip->inum, f->ip->size);
+        // Debug: check what's actually in the pages before writeback
+        for(uint64 i = start_base; i < end_base && i < start_base + PGSIZE; i += PGSIZE) {
+          pte_t *check_pte = walk(p->pagetable, i, 0);
+          if (check_pte && (*check_pte & PTE_V) && !(*check_pte & PTE_COW)) {
+            uint64 check_pa = PTE2PA(*check_pte);
+            char *check_ptr = (char *)check_pa;
+            printf("Page at va=%p has pa=%p, first 8 bytes: %x %x %x %x %x %x %x %x\n",
+                   (void*)i, (void*)check_pa,
+                   check_ptr[0], check_ptr[1], check_ptr[2], check_ptr[3],
+                   check_ptr[4], check_ptr[5], check_ptr[6], check_ptr[7]);
+          }
+        }
+#endif
+        
+        // Write back only the unmapped region, respecting file size
+        // Calculate the offset in the file for this unmapped region
+        // Use orig_start_ad (original start) not current start_ad (which may have been modified)
+        uint64 file_offset = start_base - vm->orig_start_ad;
+        uint64 write_size = end_base - start_base;
+        
+        // Don't write beyond the original file size
+        if (file_offset < f->ip->size) {
+          if (file_offset + write_size > f->ip->size) {
+            write_size = f->ip->size - file_offset;
+          }
+          printf("Writing back: offset=%ld, size=%ld, file_size=%d\n", 
+                 file_offset, write_size, f->ip->size);
+          f->ip->iops->writei(f->ip, 1, start_base, file_offset, write_size);
+        }
+        
+        f->ip->iops->iunlock(f->ip);
+        end_op();
+      }
     }
-    
-    f->ip->iops->iunlock(f->ip);
-    end_op();
   }
 
   // Unmap the pages from the page table
@@ -765,6 +822,7 @@ void copy_vma(struct vm_area_struct *dst, struct vm_area_struct *src) {
   dst->len = src->len;
   dst->prot = src->prot;
   dst->flags = src->flags;
+  dst->forked = 1;  // Mark as inherited from fork
   dst->fd = src->fd;
   dst->file = src->file;
   // Note: Don't increment ref here - caller (fork) will set dst->file

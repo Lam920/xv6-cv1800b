@@ -5,6 +5,10 @@
 #define NULL ((void *) 0)
 #endif
 
+#ifndef LAB_MMAP
+#define LAB_MMAP 1
+#endif
+
 struct timeval;
 struct sockaddr;
 struct stat;

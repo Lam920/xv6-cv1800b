@@ -7,6 +7,7 @@
 #include "defs.h"
 #include "softirq.h"
 #include "fcntl.h"
+#include "include/cache.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -77,17 +78,19 @@ usertrap(void)
 
     syscall();
   } else if(r_scause() == 13 || r_scause() == 15){
+#ifdef DEBUG_MMAP
     printf("usertrap(): mmap page fault %lx (%s) pid=%d\n", r_scause(), scause_desc(r_scause()), p->pid);
+#endif
     handle_pagefault(r_scause());
   }else if(r_scause() == 2){
     printf("illegal instruction at: %p of pid: %d with name: %s\n", (uint64 *)myproc()->trapframe->epc, myproc()->pid, myproc()->name);
-    printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+    printf("usertrap(): unexpected scause 0x%lx (%s) pid=%d\n", r_scause(), scause_desc(r_scause()), p->pid);
     printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
     panic("Handle illegal\n");
   }else if((which_dev = devintr()) != 0){
     // ok
   } else {
-    printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+    printf("usertrap(): unexpected scause 0x%lx (%s) pid=%d\n", r_scause(), scause_desc(r_scause()), p->pid);
     printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
     setkilled(p);
   }
@@ -474,13 +477,22 @@ static int handle_mmap_pagefault(uint64 va, int vma_idx, struct vm_area_struct *
     panic("kalloc");
   memset(pa, 0, PGSIZE);
 
+#ifdef DEBUG_MMAP
   printf("Mmap page fault at addr: %lx and addr_head: %lx, allocate start_ad: %lx\n", va, fault_addr_head, vm->start_ad);
-  
+#endif
   // read 4096 bytes of the relevant file into physical memory BEFORE mapping.
   // IMPORTANT: the read offset is the distance between page_fault_addr
-  // and VMA->start.
+  // and VMA->orig_start_ad (original start address, not current start_ad).
   int distance = fault_addr_head - vm->start_ad;
   mmap_read(vm->file, pa, distance, PGSIZE);
+  
+   
+  // Flush and invalidate cache to ensure coherency between kernel write and user read
+  flush_dcache_range((unsigned long)pa, (unsigned long)pa + PGSIZE);
+  invalidate_dcache_range((unsigned long)pa, (unsigned long)pa + PGSIZE);
+  
+  // Ensure memory is synchronized before mapping to user space
+  __sync_synchronize();
 
   // Now map the page with the file content into user space
   if (mappages(p->pagetable, fault_addr_head, PGSIZE, (uint64)pa, vm->prot | PTE_U) != 0) {
@@ -491,12 +503,16 @@ static int handle_mmap_pagefault(uint64 va, int vma_idx, struct vm_area_struct *
 
   // Check content using physical address (pa), not user virtual address
   char *t = (char *)pa;
+  printf("DEBUG: After mmap_read, pa=%p, first bytes: %x %x %x %x\n", 
+         pa, t[0], t[1], t[2], t[3]);
   if (t[0] != 'A') {
     printf("mismatch!!!! wanted 'A', got %x\n", t[0]);
   }
-
+  
+#ifdef DEBUG_MMAP
   printf("Trap addr base(%lx). VMA start(%lx), end(%lx) with distance: %x.\n", 
         fault_addr_head, vm->start_ad, vm->end_ad, distance);
+#endif
   return 0;
 }
 

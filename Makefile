@@ -172,6 +172,7 @@ UPROGS=\
 	$U/_stressfs\
   $U/_tcpecho\
 	$U/_udpecho\
+	$U/_httpget\
 	$U/_usertests\
 	$U/_grind\
 	$U/_wc\
@@ -184,6 +185,7 @@ UPROGS=\
 	$U/_mount\
 	$U/_ls_ext2\
 	$U/_timetest_simple\
+	$U/_mmaptest
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
