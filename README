@@ -7,13 +7,20 @@ Currently, peripherals such as uart, gpio, adc, pwm, i2c and spi are well
 supported for milkv duo. Qemu and TH1520 only support uart. I also wrote
 some userspace tools to demo the peripherals usage. Check below.
 
+In this version, sd card driver and VFS with original FS (RAM) and ext2 is supported. Also I have
+dev minimal ethernet driver and small TCP/IP stack for ethernet port on Milk-V Duo board (see .pcap file for more information).
+
 ## Build for milkv duo:
+First step is we need to TOOLPREFIX to point to path of milkv-duo toolchain (I recommend that it should be the toolchain that built from buildroot-v1 on official docs of Milk-v Duo)
+
 ./build_for_milkv_duo.sh
 
 the built img will be duo-imgtools/milkv-duo_sdcard.img, then burn it
 to tf card on PC:
 dd if=milkv-duo_sdcard.img of=/dev/sdX  (take care "sdX" must be the
 tfcard appeared on your PC, you have been warned!)
+
+Note that I edit xv6.cfg file to create minimal RFS that is in ext2 format.
 
 *gpio demo:
 $ ./blink 5   //will link 5 loops
@@ -64,6 +71,15 @@ Then connect GP7 and GP8
 $ ./spi
 $ 1 2 3 4 5 6 7 8 ...
 
+*VFS demo:
+Please refer to linkedin post by me for more detail:
+https://www.linkedin.com/posts/b%C3%B9i-th%E1%BA%BF-l%C3%A2m-8b1538364_after-a-period-of-time-working-with-filesystem-activity-7386426343724494848-7sAH?utm_source=share&utm_medium=member_android&rcm=ACoAAFp96gUB7suL800XX0oenztgcKp8OHT2aOk
+
+
+*Ethernet driver & networking demo:
+Please refer to linkedin post for more detail:
+https://www.linkedin.com/posts/b%C3%B9i-th%E1%BA%BF-l%C3%A2m-8b1538364_implement-ethernet-driver-and-porting-minimal-activity-7393685742851522560-bxrp?utm_source=share&utm_medium=member_android&rcm=ACoAAFp96gUB7suL800XX0oenztgcKp8OHT2aOk
+
 ## Build for qemu:
 git checkout kernel/config.h
 make
@@ -73,6 +89,7 @@ make kernel/kernel.bin
 cp kernel/config.h.th1520 kernel/config.h
 make
 make kernel/kernel.bin
+
 
 Build for SG200X:
 Just replace the fip.bin then build as milkv duo ;)
